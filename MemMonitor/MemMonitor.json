@@ -1,0 +1,7 @@
+{
+ "locator":"libWPEFrameworkMemMonitor.so",
+ "classname":"MemMonitor",
+ "callsign":"org.rdk.MemMonitor",
+ "autostart":false,
+ "startuporder":30
+}
