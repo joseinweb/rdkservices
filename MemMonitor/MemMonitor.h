@@ -37,22 +37,55 @@ namespace WPEFramework
             virtual void Deinitialize(PluginHost::IShell *service) override;
             virtual string Information() const override;
 
-             static MemMonitor* _instance;
+            class EXTERNAL Job : public Core::IDispatch
+            {
+            public:
+                Job(MemMonitor *monitor, uint32_t keyCode)
+                    : _monitor(_monitor), keycode(keyCode)
+                {
+                    
+                    ASSERT(_monitor != nulllptr);
+                    std::cout<<"I got called !"<<std::endl;
+                }
+                virtual ~Job()
+                {
+                }
 
-            
+            private:
+                Job() = delete;
+                Job(const Job &) = delete;
+                Job &operator=(const Job &) = delete;
+
+            public:
+                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, uint32 keycode)
+                {
+                    return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(mon, keycode)));
+                }
+                virtual void Dispatch()
+                {
+                    _monitor->Dispatch(keycode);
+                }
+
+            private:
+                MemMonitor *_monitor;
+                uint32_t keycode;
+            };
 
         private:
             MemMonitor(const MemMonitor &) = delete;
             MemMonitor &operator=(const MemMonitor &) = delete;
-            
+
+            void Dispatch(uint32_t keycode);
+
             void SubscribeForMemoryEvents();
             void pluginEventHandler(const JsonObject &parameters);
-            bool SubscribedToEvents;
-            bool interceptEnabled;
+            bool m_subscribedToEvents;
+            bool m_interceptEnabled;
             void onTimer();
 
             TpTimer m_timer;
-            std::mutex m_callMutex;            
+            mutable Core::CriticalSection m_callMutex;
+            WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
         };
     }
 }
