@@ -139,6 +139,7 @@ const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_DEVICE_CRITICALLY_LO
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_EASTER_EGG = "onEasterEgg";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_WILL_DESTROY = "onWillDestroy";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_SCREENSHOT_COMPLETE = "onScreenshotComplete";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_KEYEVENT = "onKeyEvent";
 
 using namespace std;
 using namespace RdkShell;
@@ -1601,6 +1602,15 @@ namespace WPEFramework {
             params["client"] = client;
             mShell.notify(RDKSHELL_EVENT_SIZE_CHANGE_COMPLETE, params);
         }
+        void RDKShell::RdkShellListener::onKeyEvent(const uint32_t keyCode, const uint32_t flags, const bool keyDown)
+        {
+            std::cout << "RDKShell onKeyEvent event received ..." << keyCode << std::endl;
+            JsonObject params;
+            params["keycode"] = keyCode;
+            params["flags"] = flags;
+            params["keyDown"] = keyDown;
+            mShell.notify(RDKSHELL_EVENT_ON_KEYEVENT, params);
+        }	
 
         // Registered methods (wrappers) begin
         uint32_t RDKShell::moveToFrontWrapper(const JsonObject& parameters, JsonObject& response)

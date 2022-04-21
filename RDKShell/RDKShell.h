@@ -148,6 +148,7 @@ namespace WPEFramework {
             static const string RDKSHELL_EVENT_ON_EASTER_EGG;
             static const string RDKSHELL_EVENT_ON_WILL_DESTROY;
             static const string RDKSHELL_EVENT_ON_SCREENSHOT_COMPLETE;
+	    static const string RDKSHELL_EVENT_ON_KEYEVENT;
 
             void notify(const std::string& event, const JsonObject& parameters);
             void pluginEventHandler(const JsonObject& parameters);
@@ -332,6 +333,7 @@ namespace WPEFramework {
                 virtual void onEasterEgg(const std::string& name, const std::string& actionJson);
                 virtual void onPowerKey();
                 virtual void onSizeChangeComplete(const std::string& client);
+		virtual void onKeyEvent(const uint32_t keyCode, const uint32_t flags, const bool keyDown);
 
               private:
                   RDKShell& mShell;
