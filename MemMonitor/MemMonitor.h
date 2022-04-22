@@ -28,6 +28,13 @@ namespace WPEFramework
 {
     namespace Plugin
     {
+        enum JOBNUMBER{
+            HOTKEY,
+            LAUNCHED,
+            DESTROYED,
+            LOWMEMORY
+        };
+
         class MemMonitor : public AbstractPlugin
         {
         public:
@@ -40,7 +47,7 @@ namespace WPEFramework
             class EXTERNAL Job : public Core::IDispatch
             {
             public:
-                Job(MemMonitor *monitor, uint32_t keyCode)
+                Job(MemMonitor *monitor, JOBNUMBER keyCode)
                     : _monitor(_monitor), keycode(keyCode)
                 {
                     
@@ -57,7 +64,7 @@ namespace WPEFramework
                 Job &operator=(const Job &) = delete;
 
             public:
-                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, uint32 keycode)
+                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, JOBNUMBER keycode)
                 {
                     return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(mon, keycode)));
                 }
@@ -68,24 +75,24 @@ namespace WPEFramework
 
             private:
                 MemMonitor *_monitor;
-                uint32_t keycode;
+                JOBNUMBER keycode;
             };
 
         private:
             MemMonitor(const MemMonitor &) = delete;
             MemMonitor &operator=(const MemMonitor &) = delete;
 
-            void Dispatch(uint32_t keycode);
+            void Dispatch(JOBNUMBER keycode);
 
-            void SubscribeForMemoryEvents();
+            void SubscribeToEvents();
             void pluginEventHandler(const JsonObject &parameters);
             bool m_subscribedToEvents;
-            bool m_interceptEnabled;
             void onTimer();
 
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
+            volatile bool m_isResAppRunning;
         };
     }
 }
