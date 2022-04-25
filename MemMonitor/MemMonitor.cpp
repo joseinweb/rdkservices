@@ -8,9 +8,10 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.25b"
+#define MY_VERSION "1.30"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
-
+//#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
+#define LAUNCH_URL "https://apps.rdkcentral.com/dev/Device_UI_3.6/index.html#menu"
 #define THUNDER_TIMEOUT 2000
 
 namespace WPEFramework
@@ -23,22 +24,22 @@ namespace WPEFramework
         {
             string message;
             parameters.ToString(message);
-            LOGINFO("[Jose] [Received  event], %s : %s", __FUNCTION__, C_STR(message));
+            LOGINFO("[Jose] [Received  event], %s : %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
 
-            if (parameters.HasLabel("keycode") && !parameters["keyDown"].Boolean())
+            if (parameters.HasLabel("keycode"))
             {
-                if (parameters["keycode"].Number() == 36)
+                if (!parameters["keyDown"].Boolean() && parameters["keycode"].Number() == 36 && !m_isResAppRunning)
                 {
                     LOGINFO("[Jose] Hot key ... Need to lauch ?");
                     PluginHost::WorkerPool::Instance().Submit(Job::Create(this, HOTKEY));
-                    
                 }
-                // Need to use  worker pool Job in real life.
             }
             else if (parameters.HasLabel("launchType"))
             {
                 // Something got activated ..
-                LOGINFO("[Jose] Launch notification  ... ");
+                
+                activeCallsign = parameters["client"].String();
+                LOGINFO("[Jose] Launch notification  ...%s  ",activeCallsign);
                 PluginHost::WorkerPool::Instance().Submit(Job::Create(this, LAUNCHED));
             }
             else if (parameters.HasLabel("ram"))
@@ -48,8 +49,11 @@ namespace WPEFramework
             }
             else
             {
-                 LOGINFO("[Jose] Something got destroyed  ... ");
-                PluginHost::WorkerPool::Instance().Submit(Job::Create(this, DESTROYED));
+                string killed = parameters["client"].String();
+                LOGINFO("[Jose] %s got destroyed  ... ",killed);
+                
+                if (!Utils::String::stringContains(killed, "residentapp"))
+                    PluginHost::WorkerPool::Instance().Submit(Job::Create(this, DESTROYED));
             }
         }
 
@@ -57,40 +61,89 @@ namespace WPEFramework
         {
             string message, clients;
             JsonObject req, res;
+            uint32_t status;
 
-            m_callMutex.Lock();
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> client(SUBSCRIPTION_CALLSIGN_VER);
-            uint32_t status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("getClients"), req, res);
+            status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("getClients"), req, res);
             if (Core::ERROR_NONE == status)
             {
                 clients = res["clients"].String();
-            }
-            m_isResAppRunning = (clients.find("residentapp") != std::string::npos);
+            }            
+            std::cout << "[Jose] activeCallSign : " << activeCallsign << ", clients : " << clients <<
+                      "Resident app running : " << m_isResAppRunning << std::endl;
 
-            if (HOTKEY == jobType && !m_isResAppRunning)
+
+
+            if (HOTKEY == jobType && (!m_isResAppRunning && !m_launchInitiated))
             {
+
                 req["callsign"] = "ResidentApp";
                 req["type"] = "ResidentApp";
                 req["visible"] = true;
                 req["focus"] = true;
-                req["uri"] = "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu";
+                req["uri"] = LAUNCH_URL;
 
-                uint32_t status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
+                status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
                 res.ToString(message);
-                m_isResAppRunning = (Core::ERROR_NONE == status);
-                std::cout << "[Jose] " << __FUNCTION__ << " Launch residentapp . status :"
+
+                m_callMutex.Lock();
+                m_launchInitiated = true;
+                string curCallsign = activeCallsign;
+                m_callMutex.Unlock();
+                std::cout << "[Jose] [" << __FUNCTION__ << "] Launch residentapp . status :"
                           << m_isResAppRunning << C_STR(message) << std::endl;
+
+                if (!Utils::String::stringContains(curCallsign, "residentapp"))
+                {
+                    std::cout << "[Jose] Active call sign was " << curCallsign << std::endl;
+                    req["callsign"] = curCallsign;
+                    status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
+                }
             }
-            else if (LOWMEMORY == jobType && m_isResAppRunning)
+            else if (LOWMEMORY == jobType && m_isResAppRunning )
             {
                 req["callsign"] = "ResidentApp";
-                req["type"] = "ResidentApp";
-                uint32_t status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
-                std::cout << "[Jose] " << __FUNCTION__ << " Unloaded residentapp . status :"
-                          << (Core::ERROR_NONE == status ? "true" : "false")
+                status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
+                res.ToString(message);
+
+                m_callMutex.Lock();
+                m_isResAppRunning = !(Core::ERROR_NONE == status);
+                m_callMutex.Unlock();
+                
+                std::cout << "[Jose]  Unloaded residentapp . status : "
+                          << (m_isResAppRunning ? "true" : "false")
                           << C_STR(message) << std::endl;
             }
-            m_callMutex.Unlock();
+            else if (DESTROYED == jobType)
+            {
+                if (!m_isResAppRunning && !m_launchInitiated)
+                {
+                    req["callsign"] = "ResidentApp";
+                    req["type"] = "ResidentApp";
+                    req["visible"] = true;
+                    req["focus"] = true;
+                    req["uri"] = LAUNCH_URL;
+
+                    status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
+                    res.ToString(message);
+                    m_callMutex.Lock();
+                    m_isResAppRunning = (Core::ERROR_NONE == status);
+                    m_callMutex.Unlock();
+                    std::cout << "[Jose] Launch residentapp . status :"
+                              << m_isResAppRunning << " , msg " << C_STR(message) << std::endl;
+                }
+            }
+            else if (LAUNCHED == jobType)
+            {
+                if (Utils::String::stringContains(activeCallsign, "residentapp"))
+                {
+                    m_callMutex.Lock();
+                    m_isResAppRunning = true;
+                    m_launchInitiated = false;
+                    m_callMutex.Unlock();
+                }
+
+            }
         }
 
         SERVICE_REGISTRATION(MemMonitor, 1, 0);
@@ -98,7 +151,8 @@ namespace WPEFramework
         MemMonitor::MemMonitor() : AbstractPlugin(2),
                                    m_subscribedToEvents(false),
                                    m_remoteObject(nullptr),
-                                   m_isResAppRunning(false)
+                                   m_isResAppRunning(false),
+                                   m_launchInitiated(false)
         {
             LOGINFO();
             m_timer.connect(std::bind(&MemMonitor::onTimer, this));
@@ -110,7 +164,7 @@ namespace WPEFramework
         {
             LOGINFO();
 
-            std::cout << "[Jose] version " << MY_VERSION <<std::endl;
+            std::cout << "[Jose] version " << MY_VERSION << std::endl;
             m_timer.start(RECONNECTION_TIME_IN_MILLISECONDS);
             Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), _T(SERVER_DETAILS));
             m_remoteObject = new WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>(_T(SUBSCRIPTION_CALLSIGN_VER));
@@ -184,21 +238,18 @@ namespace WPEFramework
                 std::cout << "[Jose] Subscribed to <<SUBSCRIPTION_ONDESTROYED_EVENT << events.. " << (status == Core::ERROR_NONE ? "Success" : "Failed") << std::endl;
 
                 m_subscribedToEvents = true;
-                
-                                JsonObject req, res;
-                                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "getScreenResolution", req, res);
-                                if (Core::ERROR_NONE == status)
-                                {
-                                    if (res.HasLabel("w") && res.HasLabel("h"))
-                                    {
-                                        std::cout << "[Jose] screenWidth = " << std::stoi(res["w"].String()) << " screenHeight = " << std::stoi(res["h"].String()) << std::endl;
-                                    }
-                                }
-                                else
-                                {
-                                    std::cout << "[Jose] Failed to invoke getResolution." << std::endl;
-                                }
-                
+
+                JsonObject req, res;
+                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "getClients", req, res);
+                if (Core::ERROR_NONE == status)
+                {
+                    string clients = res["clients"].String();
+                    m_isResAppRunning = (clients.find("residentapp") != std::string::npos);
+                }
+                else
+                {
+                    std::cout << "[Jose] Failed to invoke getClients." << std::endl;
+                }
             }
             else
             {

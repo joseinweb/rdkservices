@@ -28,7 +28,8 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-        enum JOBNUMBER{
+        enum JOBNUMBER
+        {
             HOTKEY,
             LAUNCHED,
             DESTROYED,
@@ -48,11 +49,10 @@ namespace WPEFramework
             {
             public:
                 Job(MemMonitor *monitor, JOBNUMBER keyCode)
-                    : _monitor(_monitor), keycode(keyCode)
+                    : _monitor(monitor), keycode(keyCode)
                 {
-                    
+
                     ASSERT(_monitor != nulllptr);
-                    std::cout<<"I got called !"<<std::endl;
                 }
                 virtual ~Job()
                 {
@@ -92,7 +92,8 @@ namespace WPEFramework
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
-            volatile bool m_isResAppRunning;
+            volatile bool m_isResAppRunning, m_launchInitiated;
+            string activeCallsign;
         };
     }
 }
