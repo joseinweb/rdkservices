@@ -88,6 +88,7 @@ namespace WPEFramework
             void pluginEventHandler(const JsonObject &parameters);
             bool m_subscribedToEvents;
             void onTimer();
+            void launchResidentApp();
 
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;

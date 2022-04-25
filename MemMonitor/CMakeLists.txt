@@ -18,7 +18,7 @@
 set(PLUGIN_NAME MemMonitor)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-set(PLUGIN_MEMMONITOR_AUTOSTART "false" CACHE STRING "Automatically start Memory Monitor plugin")
+set(PLUGIN_MEMMONITOR_AUTOSTART "true" CACHE STRING "Automatically start Memory Monitor plugin")
 set(PLUGIN_MEMMONITOR_MODE "Off" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
