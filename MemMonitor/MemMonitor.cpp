@@ -8,7 +8,7 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.30"
+#define MY_VERSION "1.31"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 //#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define LAUNCH_URL "https://apps.rdkcentral.com/dev/Device_UI_3.6/index.html#menu"
@@ -72,31 +72,13 @@ namespace WPEFramework
             std::cout << "[Jose] activeCallSign : " << activeCallsign << ", clients : " << clients <<
                       "Resident app running : " << m_isResAppRunning << std::endl;
 
-
-
             if (HOTKEY == jobType && (!m_isResAppRunning && !m_launchInitiated))
             {
 
-                req["callsign"] = "ResidentApp";
-                req["type"] = "ResidentApp";
-                req["visible"] = true;
-                req["focus"] = true;
-                req["uri"] = LAUNCH_URL;
-
-                status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
-                res.ToString(message);
-
-                m_callMutex.Lock();
-                m_launchInitiated = true;
-                string curCallsign = activeCallsign;
-                m_callMutex.Unlock();
-                std::cout << "[Jose] [" << __FUNCTION__ << "] Launch residentapp . status :"
-                          << m_isResAppRunning << C_STR(message) << std::endl;
-
-                if (!Utils::String::stringContains(curCallsign, "residentapp"))
+                if (!Utils::String::stringContains(activeCallsign, "residentapp"))
                 {
-                    std::cout << "[Jose] Active call sign was " << curCallsign << std::endl;
-                    req["callsign"] = curCallsign;
+                    std::cout << "[Jose] Active call sign was " << activeCallsign << std::endl;
+                    req["callsign"] = activeCallsign;
                     status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
                 }
             }
@@ -127,9 +109,9 @@ namespace WPEFramework
                     status = client.Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
                     res.ToString(message);
                     m_callMutex.Lock();
-                    m_isResAppRunning = (Core::ERROR_NONE == status);
+                    m_launchInitiated = true;
                     m_callMutex.Unlock();
-                    std::cout << "[Jose] Launch residentapp . status :"
+                    std::cout << "[Jose] Launched residentapp . status :"
                               << m_isResAppRunning << " , msg " << C_STR(message) << std::endl;
                 }
             }
