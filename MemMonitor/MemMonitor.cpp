@@ -8,11 +8,11 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.33"
+#define MY_VERSION "1.34"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 //#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 //#define LAUNCH_URL "https://apps.rdkcentral.com/dev/Device_UI_3.6/index.html#menu"
-#define LAUNCH_URL "http://127.0.0.1:50050/lxresui/index.html"
+#define LAUNCH_URL "http://127.0.0.1:50050/lxresui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
 
 namespace WPEFramework
@@ -64,21 +64,20 @@ namespace WPEFramework
             JsonObject req, res;
             uint32_t status;
 
-            // WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> client(SUBSCRIPTION_CALLSIGN_VER);
-
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("getClients"), req, res);
             if (Core::ERROR_NONE == status)
             {
                 clients = res["clients"].String();
             }
-            std::cout << "[Jose] activeCallSign : " << activeCallsign << ", clients : " << clients << "Resident app running : " << m_isResAppRunning << std::endl;
+            LOGINFO("[Jose] activeCallSign : %s, clients : %s, Resident app status : %d",
+                    activeCallsign, clients, m_isResAppRunning);
 
             if (HOTKEY == jobType && (!m_isResAppRunning && !m_launchInitiated))
             {
 
                 if (!activeCallsign.empty() && !Utils::String::stringContains(activeCallsign, "residentapp"))
                 {
-                    std::cout << "[Jose] Active call sign was " << activeCallsign << std::endl;
+                    LOGINFO("[Jose] Active call sign was %s", activeCallsign);
                     req["callsign"] = activeCallsign;
                     status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
                 }
@@ -98,9 +97,9 @@ namespace WPEFramework
                 m_isResAppRunning = !(Core::ERROR_NONE == status);
                 m_callMutex.Unlock();
 
-                std::cout << "[Jose]  Unloaded residentapp . status : "
-                          << (m_isResAppRunning ? "true" : "false")
-                          << C_STR(message) << std::endl;
+                LOGINFO("[Jose]  Unloaded residentapp . status : %d, apps: ",
+                        (m_isResAppRunning ? "true" : "false"),
+                        C_STR(message));
             }
             else if (DESTROYED == jobType)
             {
@@ -137,8 +136,8 @@ namespace WPEFramework
             m_callMutex.Lock();
             m_launchInitiated = true;
             m_callMutex.Unlock();
-            std::cout << "[Jose] Launched residentapp . status :"
-                      << m_isResAppRunning << " , msg " << C_STR(message) << std::endl;
+            LOGINFO("[Jose] Launched residentapp . status : %d, , msg %s ",
+                    m_isResAppRunning, C_STR(message));
         }
 
         SERVICE_REGISTRATION(MemMonitor, 1, 0);
@@ -159,7 +158,7 @@ namespace WPEFramework
         {
             LOGINFO();
 
-            std::cout << "[Jose] version " << MY_VERSION << std::endl;
+            LOGINFO("[Jose] version %s " MY_VERSION);
             m_timer.start(RECONNECTION_TIME_IN_MILLISECONDS);
             Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), _T(SERVER_DETAILS));
             m_remoteObject = new WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>(_T(SUBSCRIPTION_CALLSIGN_VER));
@@ -221,16 +220,16 @@ namespace WPEFramework
                 serviceCallsign.append(".1");
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT), &MemMonitor::pluginEventHandler, this);
-                std::cout << "[Jose] Subscribed to RDKShell " << SUBSCRIPTION_LOW_MEMORY_EVENT << (status == Core::ERROR_NONE ? " Success" : " Failed") << std::endl;
+                LOGINFO("[Jose] Subscribed to Low Memory events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT), &MemMonitor::pluginEventHandler, this);
-                std::cout << "[Jose] Subscribed to <<SUBSCRIPTION_ONKEY_EVENT << events.. " << (status == Core::ERROR_NONE ? "Success" : "Failed") << std::endl;
+                LOGINFO("[Jose] Subscribed to onKey events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT), &MemMonitor::pluginEventHandler, this);
-                std::cout << "[Jose] Subscribed to <<SUBSCRIPTION_ONLAUNCHED_EVENT << events.. " << (status == Core::ERROR_NONE ? "Success" : "Failed") << std::endl;
+                LOGINFO("[Jose] Subscribed to onLaunched events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &MemMonitor::pluginEventHandler, this);
-                std::cout << "[Jose] Subscribed to <<SUBSCRIPTION_ONDESTROYED_EVENT << events.. " << (status == Core::ERROR_NONE ? "Success" : "Failed") << std::endl;
+                LOGINFO("[Jose] Subscribed to ondestroyed events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 m_subscribedToEvents = true;
 
@@ -243,12 +242,12 @@ namespace WPEFramework
                 }
                 else
                 {
-                    std::cout << "[Jose] Failed to invoke getClients." << std::endl;
+                    LOGINFO("[Jose] Failed to invoke getClients.");
                 }
             }
             else
             {
-                std::cout << "[Jose] RDKShell is not yet active. Wait for it.. " << std::endl;
+                LOGINFO("[Jose] RDKShell is not yet active. Wait for it.. ");
             }
         }
     }
