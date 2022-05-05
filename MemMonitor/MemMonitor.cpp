@@ -3,12 +3,14 @@
 #define SERVER_DETAILS "127.0.0.1:9998"
 #define SUBSCRIPTION_CALLSIGN "org.rdk.RDKShell"
 #define SUBSCRIPTION_CALLSIGN_VER SUBSCRIPTION_CALLSIGN ".1"
+
 #define SUBSCRIPTION_LOW_MEMORY_EVENT "onDeviceLowRamWarning"
 #define SUBSCRIPTION_ONKEY_EVENT "onKeyEvent"
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
+#define SUBSCRIPTION_ONSUSPENDED_EVENT "onSuspended"
 
-#define MY_VERSION "1.34"
+#define MY_VERSION "1.36"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 //#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 //#define LAUNCH_URL "https://apps.rdkcentral.com/dev/Device_UI_3.6/index.html#menu"
@@ -31,7 +33,7 @@ namespace WPEFramework
             {
                 if (!parameters["keyDown"].Boolean() && parameters["keycode"].Number() == 36 && !m_isResAppRunning)
                 {
-                    LOGINFO("[Jose] Hot key ... Need to lauch ?");
+                    LOGINFO("[Jose] Hot key ... Launching resident app ?");
                     PluginHost::WorkerPool::Instance().Submit(Job::Create(this, HOTKEY));
                 }
             }
@@ -40,7 +42,7 @@ namespace WPEFramework
                 // Something got activated ..
 
                 activeCallsign = parameters["client"].String();
-                LOGINFO("[Jose] Launch notification  ...%s  ", activeCallsign);
+                LOGINFO("[Jose] Launch notification  ...%s  ", C_STR(activeCallsign));
                 PluginHost::WorkerPool::Instance().Submit(Job::Create(this, LAUNCHED));
             }
             else if (parameters.HasLabel("ram"))
@@ -51,10 +53,41 @@ namespace WPEFramework
             else
             {
                 string killed = parameters["client"].String();
-                LOGINFO("[Jose] %s got destroyed  ... ", killed);
+                LOGINFO("[Jose] %s got destroyed  ... ", C_STR(killed));
 
                 if (!Utils::String::stringContains(killed, "residentapp"))
                     PluginHost::WorkerPool::Instance().Submit(Job::Create(this, DESTROYED));
+            }
+        }
+        void MemMonitor::onSuspended(const JsonObject &parameters)
+        {
+
+            LOGINFO("[Jose] m_isResAppRunning =%d m_launchInitiated = %d ", m_isResAppRunning ,m_launchInitiated);
+            // Case 1. Suspended app is reference app .
+            if (parameters.HasLabel("client"))
+            {
+                string suspendedApp = parameters["client"].String();
+                if (Utils::String::stringContains(suspendedApp, "residentapp"))
+                {
+                    m_callMutex.Lock();
+                    m_isResAppRunning = false;
+                    m_suspendInitiated = false;
+                    m_callMutex.Unlock();
+                }
+            }
+        }
+        void MemMonitor::onDestroyed(const JsonObject &parameters)
+        {
+            // Case 1.Focused app is not referenceapp.
+            LOGINFO("[Jose] m_isResAppRunning =%d m_launchInitiated = %d ", m_isResAppRunning ,m_launchInitiated);
+             if (parameters.HasLabel("client"))
+            {
+                string destroyedApp = parameters["client"].String();
+                if (!Utils::String::stringContains(destroyedApp, "residentapp") &&
+                    !m_isResAppRunning && !m_launchInitiated)
+                {
+                    launchResidentApp();
+                }
             }
         }
 
@@ -64,20 +97,22 @@ namespace WPEFramework
             JsonObject req, res;
             uint32_t status;
 
+            LOGINFO("[Jose] Entering..");
+
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("getClients"), req, res);
             if (Core::ERROR_NONE == status)
             {
                 clients = res["clients"].String();
             }
-            LOGINFO("[Jose] activeCallSign : %s, clients : %s, Resident app status : %d",
-                    activeCallsign, clients, m_isResAppRunning);
+            LOGINFO("[Jose] activeCallSign : %s, clients : %s, Resident app status : %d , %d launched = %d",
+                    C_STR(activeCallsign), clients, m_isResAppRunning, m_launchInitiated);
 
             if (HOTKEY == jobType && (!m_isResAppRunning && !m_launchInitiated))
             {
 
                 if (!activeCallsign.empty() && !Utils::String::stringContains(activeCallsign, "residentapp"))
                 {
-                    LOGINFO("[Jose] Active call sign was %s", activeCallsign);
+                    LOGINFO("[Jose] Active call sign was %s", C_STR(activeCallsign));
                     req["callsign"] = activeCallsign;
                     status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
                 }
@@ -90,23 +125,16 @@ namespace WPEFramework
             {
 
                 req["callsign"] = "ResidentApp";
-                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
+                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("suspend"), req, res);
                 res.ToString(message);
 
                 m_callMutex.Lock();
-                m_isResAppRunning = !(Core::ERROR_NONE == status);
+                m_isResAppRunning = (Core::ERROR_NONE == status) ? false : m_isResAppRunning;
                 m_callMutex.Unlock();
 
-                LOGINFO("[Jose]  Unloaded residentapp . status : %d, apps: ",
+                LOGINFO("[Jose]  Unloaded residentapp . status : %s, apps: ",
                         (m_isResAppRunning ? "true" : "false"),
                         C_STR(message));
-            }
-            else if (DESTROYED == jobType)
-            {
-                if (!m_isResAppRunning && !m_launchInitiated)
-                {
-                    launchResidentApp();
-                }
             }
             else if (LAUNCHED == jobType)
             {
@@ -118,6 +146,7 @@ namespace WPEFramework
                     m_callMutex.Unlock();
                 }
             }
+            LOGINFO("[Jose] Exiting..");
         }
         void MemMonitor::launchResidentApp()
         {
@@ -135,6 +164,7 @@ namespace WPEFramework
             res.ToString(message);
             m_callMutex.Lock();
             m_launchInitiated = true;
+            m_suspendInitiated = false;
             m_callMutex.Unlock();
             LOGINFO("[Jose] Launched residentapp . status : %d, , msg %s ",
                     m_isResAppRunning, C_STR(message));
@@ -146,7 +176,8 @@ namespace WPEFramework
                                    m_subscribedToEvents(false),
                                    m_remoteObject(nullptr),
                                    m_isResAppRunning(false),
-                                   m_launchInitiated(false)
+                                   m_launchInitiated(false),
+                                   m_suspendInitiated(false)
         {
             LOGINFO();
             m_timer.connect(std::bind(&MemMonitor::onTimer, this));
@@ -169,21 +200,20 @@ namespace WPEFramework
         {
 
             LOGINFO();
-            m_callMutex.Lock();
             if (m_subscribedToEvents)
             {
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT));
+                m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONSUSPENDED_EVENT));
                 m_subscribedToEvents = false;
-                delete m_remoteObject;
+                //delete m_remoteObject;
             }
             if (m_timer.isActive())
             {
                 m_timer.stop();
             }
-            m_callMutex.Unlock();
         }
 
         string MemMonitor::Information() const
@@ -220,16 +250,19 @@ namespace WPEFramework
                 serviceCallsign.append(".1");
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT), &MemMonitor::pluginEventHandler, this);
-                LOGINFO("[Jose] Subscribed to Low Memory events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
+                LOGINFO("[Jose] Subscribed to Low Memory events..  status %s", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT), &MemMonitor::pluginEventHandler, this);
-                LOGINFO("[Jose] Subscribed to onKey events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
+                LOGINFO("[Jose] Subscribed to onKey events..  status %s", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT), &MemMonitor::pluginEventHandler, this);
-                LOGINFO("[Jose] Subscribed to onLaunched events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
+                LOGINFO("[Jose] Subscribed to onLaunched events..  status %s", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
-                status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &MemMonitor::pluginEventHandler, this);
-                LOGINFO("[Jose] Subscribed to ondestroyed events..  status %b", (status == Core::ERROR_NONE ? "Success" : "Failed"));
+                status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &MemMonitor::onDestroyed, this);
+                LOGINFO("[Jose] Subscribed to ondestroyed events..  status %s", (status == Core::ERROR_NONE ? "Success" : "Failed"));
+
+                status = m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONSUSPENDED_EVENT), &MemMonitor::onSuspended, this);
+                LOGINFO("[Jose] Subscribed to onSuspended events..  status %s", (status == Core::ERROR_NONE ? "Success" : "Failed"));
 
                 m_subscribedToEvents = true;
 

@@ -38,12 +38,6 @@ namespace WPEFramework
 
         class MemMonitor : public AbstractPlugin
         {
-        public:
-            MemMonitor();
-            virtual ~MemMonitor();
-            virtual const string Initialize(PluginHost::IShell *service) override;
-            virtual void Deinitialize(PluginHost::IShell *service) override;
-            virtual string Information() const override;
 
             class EXTERNAL Job : public Core::IDispatch
             {
@@ -78,7 +72,6 @@ namespace WPEFramework
                 JOBNUMBER keycode;
             };
 
-        private:
             MemMonitor(const MemMonitor &) = delete;
             MemMonitor &operator=(const MemMonitor &) = delete;
 
@@ -86,6 +79,8 @@ namespace WPEFramework
 
             void SubscribeToEvents();
             void pluginEventHandler(const JsonObject &parameters);
+            void onSuspended(const JsonObject &parameters);
+            void onDestroyed(const JsonObject &parameters);
             bool m_subscribedToEvents;
             void onTimer();
             void launchResidentApp();
@@ -93,8 +88,15 @@ namespace WPEFramework
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
-            volatile bool m_isResAppRunning, m_launchInitiated;
+            volatile bool m_isResAppRunning, m_launchInitiated,m_suspendInitiated;
             string activeCallsign;
+
+        public:
+            MemMonitor();
+            virtual ~MemMonitor();
+            virtual const string Initialize(PluginHost::IShell *service) override;
+            virtual void Deinitialize(PluginHost::IShell *service) override;
+            virtual string Information() const override;
         };
     }
 }
