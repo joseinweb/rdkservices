@@ -28,12 +28,11 @@ namespace WPEFramework
 {
     namespace Plugin
     {
-        enum JOBNUMBER
+        enum JOBTYPE
         {
-            HOTKEY,
-            LAUNCHED,
-            DESTROYED,
-            LOWMEMORY
+            LAUNCH,
+            OFFLOAD,
+            REMOVE_ACTIVE_APP
         };
 
         class MemMonitor : public AbstractPlugin
@@ -42,8 +41,8 @@ namespace WPEFramework
             class EXTERNAL Job : public Core::IDispatch
             {
             public:
-                Job(MemMonitor *monitor, JOBNUMBER keyCode)
-                    : _monitor(monitor), keycode(keyCode)
+                Job(MemMonitor *monitor, JOBTYPE _jobType)
+                    : _monitor(monitor), jobType(_jobType)
                 {
 
                     ASSERT(_monitor != nulllptr);
@@ -58,29 +57,32 @@ namespace WPEFramework
                 Job &operator=(const Job &) = delete;
 
             public:
-                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, JOBNUMBER keycode)
+                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, JOBTYPE jobType)
                 {
-                    return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(mon, keycode)));
+                    return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(mon, jobType)));
                 }
                 virtual void Dispatch()
                 {
-                    _monitor->Dispatch(keycode);
+                    _monitor->Dispatch(jobType);
                 }
 
             private:
                 MemMonitor *_monitor;
-                JOBNUMBER keycode;
+                JOBTYPE jobType;
             };
 
             MemMonitor(const MemMonitor &) = delete;
             MemMonitor &operator=(const MemMonitor &) = delete;
 
-            void Dispatch(JOBNUMBER keycode);
+            void Dispatch(JOBTYPE keycode);
 
             void SubscribeToEvents();
-            void pluginEventHandler(const JsonObject &parameters);
+            void onLowMemoryEvent(const JsonObject &parameters);
             void onSuspended(const JsonObject &parameters);
             void onDestroyed(const JsonObject &parameters);
+            void onLaunched(const JsonObject &parameters);
+            void onKeyEvent(const JsonObject &parameters);
+            
             bool m_subscribedToEvents;
             void onTimer();
             void launchResidentApp();
@@ -88,7 +90,7 @@ namespace WPEFramework
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
-            volatile bool m_isResAppRunning, m_launchInitiated,m_suspendInitiated;
+            volatile bool m_isResAppRunning, m_launchInitiated;
             string activeCallsign;
 
         public:
