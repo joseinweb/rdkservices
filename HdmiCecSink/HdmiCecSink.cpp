@@ -264,7 +264,7 @@ namespace WPEFramework
                  try
                  { 
                      LOGINFO(" sending ReportPhysicalAddress response physical_addr :%s logicalAddress :%x \n",physical_addr.toString().c_str(), logicalAddress.toInt());
-                     conn.sendTo(LogicalAddress(LogicalAddress::BROADCAST), MessageEncoder().encode(ReportPhysicalAddress(physical_addr,logicalAddress.toInt())),100);
+                     conn.sendTo(LogicalAddress(LogicalAddress::BROADCAST), MessageEncoder().encode(ReportPhysicalAddress(physical_addr,logicalAddress.toInt())),500);
                  } 
                  catch(...)
                  {
@@ -461,11 +461,20 @@ namespace WPEFramework
        void HdmiCecSinkProcessor::process (const InitiateArc &msg, const Header &header)
        {
             printHeader(header);
+            PhysicalAddress physical_addr_invalid = {0x0F,0x0F,0x0F,0x0F};
+            PhysicalAddress physical_addr_arc_port = {0x02,0x00,0x00,0x00};
+
             LOGINFO("Command: INITIATE_ARC \n");
             if(!HdmiCecSink::_instance)
 	    return;
-            HdmiCecSink::_instance->Process_InitiateArc();	
-       }  
+
+            if( (HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString() == physical_addr_arc_port.toString()) || (HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString() == physical_addr_invalid.toString()) ) {
+                LOGINFO("Command: INITIATE_ARC InitiateArc success %s \n",HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString().c_str());
+                HdmiCecSink::_instance->Process_InitiateArc();
+            } else {
+                LOGINFO("Command: INITIATE_ARC InitiateArc ignore %s \n",HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString().c_str());
+            }
+       }
        void HdmiCecSinkProcessor::process (const TerminateArc &msg, const Header &header)
        {
            printHeader(header);
@@ -1932,7 +1941,7 @@ namespace WPEFramework
                        if(!(_instance->smConnection))
                            return;
 		       LOGINFO(" Sending FeatureAbort to %s for opcode %s with reason %s ",logicalAddress.toString().c_str(),feature.toString().c_str(),reason.toString().c_str());
-                       _instance->smConnection->sendTo(logicalAddress, MessageEncoder().encode(FeatureAbort(feature,reason)), 100);
+                       _instance->smConnection->sendTo(logicalAddress, MessageEncoder().encode(FeatureAbort(feature,reason)), 500);
                  }
 	void HdmiCecSink::pingDevices(std::vector<int> &connected , std::vector<int> &disconnected)
         {

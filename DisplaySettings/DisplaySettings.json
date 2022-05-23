@@ -176,6 +176,17 @@
             "type": "string",
             "example": "FULL"
         },
+        "colordepth": {
+            "summary": "Video display color depth.",
+            "type": "string",
+            "enum": [
+                "8 Bit",
+                "10 Bit",
+                "12 Bit",
+                "Auto"
+            ],
+            "example": "12 Bit"
+        },
         "result": {
             "type":"object",
             "properties": {
@@ -824,6 +835,38 @@
                 },
                 "required": [
                     "muted",
+                    "success"
+                ]
+            }
+        },
+        "getPreferredColorDepth":{
+            "summary": "Returns the current color depth on the selected video display port.\n \n### Event \n\n No Events.",
+            "params": {
+                "type":"object",
+                "properties": {
+                    "videoDisplay": {
+                        "$ref": "#/definitions/videoDisplay"
+                    },
+                    "persist": {
+                        "summary":"Persists the color depth",
+                        "type": "boolean",
+                        "example": true
+                    }
+                },
+                "required":[
+                ]
+            },
+            "result": {
+                "type":"object",
+                "properties": {
+                    "resolution": {
+                        "$ref": "#/definitions/colordepth"
+                    },
+                    "success": {
+                        "$ref": "#/definitions/success"
+                    }
+                },
+                "required": [
                     "success"
                 ]
             }
@@ -1737,6 +1780,12 @@
                         "summary":"Persists the resolution",
                         "type": "boolean",
                         "example": true
+                    },
+                    "ignoreEdid": {
+                        "summary": "Ignore the supported resolutions as transmitted by the connected TV EDID",
+                        "type": "boolean",
+                        "default": false,
+                        "example": true
                     }
                 },
                 "required": [
@@ -2032,6 +2081,32 @@
                 "$ref": "#/definitions/result"
             }
         },
+        "setPreferredColorDepth":{
+            "summary": "Sets the current color depth for the videoDisplay.\n",
+            "params": {
+                "type": "object",
+                "properties": {
+                    "videoDisplay": {
+                        "$ref": "#/definitions/videoDisplay"
+                    },
+                    "colorDepth": {
+                        "$ref": "#/definitions/colordepth"
+                    },
+                    "persist": {
+                        "summary":"Persists the color depth",
+                        "type": "boolean",
+                        "example": true
+                    }
+                },
+                "required": [
+                    "videoDisplay",
+                    "colorDepth"
+                ]
+            },
+            "result": {
+                "$ref": "#/definitions/result"
+            }
+        },
         "setScartParameter":{
             "summary": "Sets SCART parameters.  \n   \nPossible values:  \n| **Parameter** | **ParameterData** |  \n| `aspect_ratio` | `4x3` or `16x9` |  \n| `tv_startup` | `on` or `off` |  \n| `rgb` | `on` (disables cvbs) |  \n| `cvbs` | `on` (disables rgb) |  \n| `macrovision` | not implemented |  \n| `cgms` |  `disabled`, `copyNever`, `copyOnce`, `copyFreely`, or `copyNoMore` |  \n| `port` | `on` or `off` | \n \n### Event \n\n No Events.",
             "params": {
@@ -2243,8 +2318,30 @@
             "result": {
                 "$ref": "#/definitions/result"
             }
+        },
+        "getColorDepthCapabilities": {
+            "summary": "Returns supported color depth capabilities.\n \n### Event \n\n No Events.",
+            "result": {
+                "type":"object",
+                "properties": {
+                    "getColorDepthCapabilities": {
+                        "summary": "A string array of supported STB color depth capabilities",
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "example": "8 Bit"
+                        }
+                    },
+                    "success": {
+                        "$ref": "#/definitions/success"
+                    }
+                },
+                "required": [
+                    "success"
+                ]
+            }
         }
-    },    
+    },
     "events": {
         "activeInputChanged":{
             "summary": "Triggered on active input change (RxSense)",
@@ -2292,11 +2389,11 @@
                     },
                     "isConnected": {
                         "summary": "Current connection status of the audio port",
+                        "type": "string",
                         "enum": [
                             "connected",
                             "disconnected"
                         ],
-                        "type": "string",
                         "example": "connected"
                     }
                 },
