@@ -9,10 +9,8 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.37b"
+#define MY_VERSION "1.38"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
-//#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
-//#define LAUNCH_URL "https://apps.rdkcentral.com/dev/Device_UI_3.6/index.html#menu"
 #define LAUNCH_URL "http://127.0.0.1:50050/lxresui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
 
@@ -26,7 +24,7 @@ namespace WPEFramework
         {
             string message;
             parameters.ToString(message);
-            LOGINFO("[Jose] [Low memory  event], %s : %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
+            LOGINFO(" [Low memory  event], %s : %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
 
             if (parameters.HasLabel("ram"))
             {
@@ -50,12 +48,12 @@ namespace WPEFramework
                     {
                         if (!m_isResAppRunning && !m_launchInitiated)
                         {
-                            LOGINFO("[Jose] Hot key ... Launching resident app ");
+                            LOGINFO(" Hot key ... Launching resident app ");
                             PluginHost::WorkerPool::Instance().Submit(Job::Create(this, LAUNCH));
                         }
                         else
                         {
-                            LOGINFO("[Jose] Hot key ... Resident app status launched: %d, islaunching : %d",
+                            LOGINFO(" Hot key ... Resident app status launched: %d, islaunching : %d",
                                     m_isResAppRunning, m_launchInitiated);
                         }
                     }
@@ -67,7 +65,7 @@ namespace WPEFramework
             if (parameters.HasLabel("client"))
             {
                 activeCallsign = parameters["client"].String();
-                LOGINFO("[Jose] Launch notification  ...%s  ", C_STR(activeCallsign));
+                LOGINFO(" Launch notification  ...%s  ", C_STR(activeCallsign));
 
                 if (Utils::String::stringContains(activeCallsign, "residentapp"))
                 {
@@ -81,7 +79,7 @@ namespace WPEFramework
         void MemMonitor::onDestroyed(const JsonObject &parameters)
         {
             // Case 1.Focused app is not referenceapp.
-            LOGINFO("[Jose] m_isResAppRunning =%d m_launchInitiated = %d ", m_isResAppRunning, m_launchInitiated);
+            LOGINFO(" m_isResAppRunning =%d m_launchInitiated = %d ", m_isResAppRunning, m_launchInitiated);
             if (parameters.HasLabel("client"))
             {
                 string destroyedApp = parameters["client"].String();
@@ -132,14 +130,14 @@ namespace WPEFramework
             req["type"] = "ResidentApp";
             req["visible"] = true;
             req["focus"] = true;
-            req["uri"] = LAUNCH_URL;
+            req["uri"] = homeURL;
 
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
             res.ToString(message);
             m_callMutex.Lock();
             m_launchInitiated = true;
             m_callMutex.Unlock();
-            LOGINFO("[Jose] Launched residentapp . status : %d,  msg %s ",
+            LOGINFO(" Launched residentapp . status : %d,  msg %s ",
                     (status == Core::ERROR_NONE), C_STR(message));
         }
 
@@ -157,14 +155,25 @@ namespace WPEFramework
         MemMonitor::~MemMonitor()
         {
         }
-        const string MemMonitor::Initialize(PluginHost::IShell * /* service */)
+        const string MemMonitor::Initialize(PluginHost::IShell * service )
         {
             LOGINFO();
 
-            LOGINFO("[Jose] version %s ", MY_VERSION);
+            LOGINFO(" version %s ", MY_VERSION);
             m_timer.start(RECONNECTION_TIME_IN_MILLISECONDS);
             Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), _T(SERVER_DETAILS));
             m_remoteObject = new WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>(_T(SUBSCRIPTION_CALLSIGN_VER));
+
+             std::string configLine = service->ConfigLine();
+             if (!configLine.empty())
+             {
+                JsonObject serviceConfig = JsonObject(configLine.c_str());
+                if (serviceConfig.HasLabel("homeurl"))
+                    homeURL = serviceConfig["homeurl"].String();
+                else
+                    homeURL = LAUNCH_URL;
+             }
+             LOGINFO("Home URL is set to [%s] .",C_STR(homeURL));
             return "";
         }
 
@@ -203,15 +212,15 @@ namespace WPEFramework
                 if (m_timer.isActive())
                 {
                     m_timer.stop();
-                    LOGINFO("[Jose] Timer stopped.");
+                    LOGINFO(" Timer stopped.");
                 }
-                LOGINFO("[Jose]Subscription completed.");
+                LOGINFO("Subscription completed.");
             }
             m_callMutex.Unlock();
         }
         void MemMonitor::SubscribeToEvents()
         {
-            LOGINFO("[Jose] Attempting event subscription");
+            LOGINFO(" Attempting event subscription");
 
             if (Utils::isPluginActivated(SUBSCRIPTION_CALLSIGN))
             {
@@ -235,12 +244,12 @@ namespace WPEFramework
                 }
                 else
                 {
-                    LOGINFO("[Jose] Failed to invoke getClients.");
+                    LOGINFO(" Failed to invoke getClients.");
                 }
             }
             else
             {
-                LOGINFO("[Jose] RDKShell is not yet active. Wait for it.. ");
+                LOGINFO(" RDKShell is not yet active. Wait for it.. ");
             }
         }
     }

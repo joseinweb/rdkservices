@@ -92,6 +92,7 @@ namespace WPEFramework
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
             volatile bool m_isResAppRunning, m_launchInitiated;
             string activeCallsign;
+            string homeURL;
 
         public:
             MemMonitor();
