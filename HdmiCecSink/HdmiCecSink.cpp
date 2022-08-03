@@ -36,6 +36,7 @@
 #include "websocket/URL.h"
 
 #include "utils.h"
+#include "UtilsIarm.h"
 
 #define HDMICECSINK_METHOD_SET_ENABLED 			"setEnabled"
 #define HDMICECSINK_METHOD_GET_ENABLED 			"getEnabled"
@@ -71,7 +72,6 @@
 #define HDMICECSINK_REQUEST_INTERVAL_TIME_MS 		200
 #define HDMICECSINK_NUMBER_TV_ADDR 					2
 #define HDMICECSINK_UPDATE_POWER_STATUS_INTERVA_MS    (60 * 1000)
-#define HDMISINK_ARCPORT                               1
 #define HDMISINK_ARC_START_STOP_MAX_WAIT_MS           4000
 
 
@@ -143,6 +143,7 @@ static int32_t powerState = DEVICE_POWER_STATE_OFF;
 static vector<uint8_t> formatid = {0,0};
 static vector<uint8_t> audioFormatCode = { SAD_FMT_CODE_ENHANCED_AC3,SAD_FMT_CODE_AC3 };
 static uint8_t numberofdescriptor = 2;
+static int32_t HdmiArcPortID = -1;
 
 namespace WPEFramework
 {
@@ -462,11 +463,18 @@ namespace WPEFramework
        {
             printHeader(header);
             PhysicalAddress physical_addr_invalid = {0x0F,0x0F,0x0F,0x0F};
-            PhysicalAddress physical_addr_arc_port = {0x02,0x00,0x00,0x00};
+            PhysicalAddress physical_addr_arc_port = {0x0F,0x0F,0x0F,0x0F};
 
             LOGINFO("Command: INITIATE_ARC \n");
-            if(!HdmiCecSink::_instance)
+            if(!HdmiCecSink::_instance || HdmiArcPortID == -1)
 	    return;
+
+            if (HdmiArcPortID == 0 )
+               physical_addr_arc_port = {0x01,0x00,0x00,0x00};
+            if (HdmiArcPortID == 1 )
+               physical_addr_arc_port = {0x02,0x00,0x00,0x00};
+            if (HdmiArcPortID == 2 )
+               physical_addr_arc_port = {0x03,0x00,0x00,0x00};
 
             if( (HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString() == physical_addr_arc_port.toString()) || (HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString() == physical_addr_invalid.toString()) ) {
                 LOGINFO("Command: INITIATE_ARC InitiateArc success %s \n",HdmiCecSink::_instance->deviceList[0x5].m_physicalAddr.toString().c_str());
@@ -504,7 +512,7 @@ namespace WPEFramework
 //=========================================== HdmiCecSink =========================================
 
        HdmiCecSink::HdmiCecSink()
-       : AbstractPlugin()
+       : PluginHost::JSONRPC()
        {
        	   int err;
            LOGWARN("Initlaizing HdmiCecSink");
@@ -523,29 +531,29 @@ namespace WPEFramework
 
            InitializeIARM();
 
-           registerMethod(HDMICECSINK_METHOD_SET_ENABLED, &HdmiCecSink::setEnabledWrapper, this);
-           registerMethod(HDMICECSINK_METHOD_GET_ENABLED, &HdmiCecSink::getEnabledWrapper, this);
-           registerMethod(HDMICECSINK_METHOD_SET_OSD_NAME, &HdmiCecSink::setOSDNameWrapper, this);
-           registerMethod(HDMICECSINK_METHOD_GET_OSD_NAME, &HdmiCecSink::getOSDNameWrapper, this);
-           registerMethod(HDMICECSINK_METHOD_SET_VENDOR_ID, &HdmiCecSink::setVendorIdWrapper, this);
-           registerMethod(HDMICECSINK_METHOD_GET_VENDOR_ID, &HdmiCecSink::getVendorIdWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_PRINT_DEVICE_LIST, &HdmiCecSink::printDeviceListWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SET_ACTIVE_PATH, &HdmiCecSink::setActivePathWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SET_ROUTING_CHANGE, &HdmiCecSink::setRoutingChangeWrapper, this); 
-		   registerMethod(HDMICECSINK_METHOD_GET_DEVICE_LIST, &HdmiCecSink::getDeviceListWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_GET_ACTIVE_SOURCE, &HdmiCecSink::getActiveSourceWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SET_ACTIVE_SOURCE, &HdmiCecSink::setActiveSourceWrapper, this);
-	       registerMethod(HDMICECSINK_METHOD_GET_ACTIVE_ROUTE, &HdmiCecSink::getActiveRouteWrapper, this);
-		  registerMethod(HDMICECSINK_METHOD_REQUEST_ACTIVE_SOURCE, &HdmiCecSink::requestActiveSourceWrapper, this);
-                   registerMethod(HDMICECSINK_METHOD_SETUP_ARC, &HdmiCecSink::setArcEnableDisableWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SET_MENU_LANGUAGE, &HdmiCecSink::setMenuLanguageWrapper, this);
-                   registerMethod(HDMICECSINK_METHOD_REQUEST_SHORT_AUDIO_DESCRIPTOR, &HdmiCecSink::requestShortAudioDescriptorWrapper, this);
-                   registerMethod(HDMICECSINK_METHOD_SEND_STANDBY_MESSAGE, &HdmiCecSink::sendStandbyMessageWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SEND_AUDIO_DEVICE_POWER_ON, &HdmiCecSink::sendAudioDevicePowerOnMsgWrapper, this);
-		   registerMethod(HDMICECSINK_METHOD_SEND_KEY_PRESS,&HdmiCecSink::sendRemoteKeyPressWrapper,this);
-		   registerMethod(HDMICECSINK_METHOD_SEND_GIVE_AUDIO_STATUS,&HdmiCecSink::sendGiveAudioStatusWrapper,this);
-		   registerMethod(HDMICECSINK_METHOD_GET_AUDIO_DEVICE_CONNECTED_STATUS,&HdmiCecSink::getAudioDeviceConnectedStatusWrapper,this);
-                   registerMethod(HDMICECSINK_METHOD_REQUEST_AUDIO_DEVICE_POWER_STATUS,&HdmiCecSink::requestAudioDevicePowerStatusWrapper,this);
+           Register(HDMICECSINK_METHOD_SET_ENABLED, &HdmiCecSink::setEnabledWrapper, this);
+           Register(HDMICECSINK_METHOD_GET_ENABLED, &HdmiCecSink::getEnabledWrapper, this);
+           Register(HDMICECSINK_METHOD_SET_OSD_NAME, &HdmiCecSink::setOSDNameWrapper, this);
+           Register(HDMICECSINK_METHOD_GET_OSD_NAME, &HdmiCecSink::getOSDNameWrapper, this);
+           Register(HDMICECSINK_METHOD_SET_VENDOR_ID, &HdmiCecSink::setVendorIdWrapper, this);
+           Register(HDMICECSINK_METHOD_GET_VENDOR_ID, &HdmiCecSink::getVendorIdWrapper, this);
+		   Register(HDMICECSINK_METHOD_PRINT_DEVICE_LIST, &HdmiCecSink::printDeviceListWrapper, this);
+		   Register(HDMICECSINK_METHOD_SET_ACTIVE_PATH, &HdmiCecSink::setActivePathWrapper, this);
+		   Register(HDMICECSINK_METHOD_SET_ROUTING_CHANGE, &HdmiCecSink::setRoutingChangeWrapper, this); 
+		   Register(HDMICECSINK_METHOD_GET_DEVICE_LIST, &HdmiCecSink::getDeviceListWrapper, this);
+		   Register(HDMICECSINK_METHOD_GET_ACTIVE_SOURCE, &HdmiCecSink::getActiveSourceWrapper, this);
+		   Register(HDMICECSINK_METHOD_SET_ACTIVE_SOURCE, &HdmiCecSink::setActiveSourceWrapper, this);
+	       Register(HDMICECSINK_METHOD_GET_ACTIVE_ROUTE, &HdmiCecSink::getActiveRouteWrapper, this);
+		  Register(HDMICECSINK_METHOD_REQUEST_ACTIVE_SOURCE, &HdmiCecSink::requestActiveSourceWrapper, this);
+                   Register(HDMICECSINK_METHOD_SETUP_ARC, &HdmiCecSink::setArcEnableDisableWrapper, this);
+		   Register(HDMICECSINK_METHOD_SET_MENU_LANGUAGE, &HdmiCecSink::setMenuLanguageWrapper, this);
+                   Register(HDMICECSINK_METHOD_REQUEST_SHORT_AUDIO_DESCRIPTOR, &HdmiCecSink::requestShortAudioDescriptorWrapper, this);
+                   Register(HDMICECSINK_METHOD_SEND_STANDBY_MESSAGE, &HdmiCecSink::sendStandbyMessageWrapper, this);
+		   Register(HDMICECSINK_METHOD_SEND_AUDIO_DEVICE_POWER_ON, &HdmiCecSink::sendAudioDevicePowerOnMsgWrapper, this);
+		   Register(HDMICECSINK_METHOD_SEND_KEY_PRESS,&HdmiCecSink::sendRemoteKeyPressWrapper,this);
+		   Register(HDMICECSINK_METHOD_SEND_GIVE_AUDIO_STATUS,&HdmiCecSink::sendGiveAudioStatusWrapper,this);
+		   Register(HDMICECSINK_METHOD_GET_AUDIO_DEVICE_CONNECTED_STATUS,&HdmiCecSink::getAudioDeviceConnectedStatusWrapper,this);
+                   Register(HDMICECSINK_METHOD_REQUEST_AUDIO_DEVICE_POWER_STATUS,&HdmiCecSink::requestAudioDevicePowerStatusWrapper,this);
            logicalAddressDeviceType = "None";
            logicalAddress = 0xFF;
            m_sendKeyEventThreadExit = false;
@@ -624,6 +632,7 @@ namespace WPEFramework
                    LOGWARN("Exception while enabling CEC settings .\r\n");
                }
             }
+            getHdmiArcPortID();
             
        }
 
@@ -652,9 +661,12 @@ namespace WPEFramework
 		LOGERR("exception in thread join %s", e.what());
 	    }
 
-	    m_sendKeyEventThreadExit = true;
-            std::unique_lock<std::mutex> lk(m_sendKeyEventMutex);
-            m_sendKeyCV.notify_one();
+	    {
+	        m_sendKeyEventThreadExit = true;
+                std::unique_lock<std::mutex> lk(m_sendKeyEventMutex);
+                m_sendKeyEventThreadRun = true;
+                m_sendKeyCV.notify_one();
+            }
 
 	    try
 	    {
@@ -870,16 +882,21 @@ namespace WPEFramework
                         }
 			CheckHdmiInState();
 
-          m_pollNextState = POLL_THREAD_STATE_PING;
-          m_ThreadExitCV.notify_one();
-          updateArcState();  
+          if(cecEnableStatus) {
+              LOGINFO("cecEnableStatus : %d Trigger CEC Ping !!! \n", cecEnableStatus);
+              m_pollNextState = POLL_THREAD_STATE_PING;
+              m_ThreadExitCV.notify_one();
+          }
+          if( HdmiArcPortID >= 0 ) {
+              updateArcState();  
+          }
           return;
        }
        void HdmiCecSink::updateArcState()
        {
            if ( m_currentArcRoutingState != ARC_STATE_ARC_TERMINATED )
            {
-        	if (!(hdmiInputs[HDMISINK_ARCPORT].m_isConnected))
+        	if (!(hdmiInputs[HdmiArcPortID].m_isConnected))
 		{
                    std::lock_guard<std::mutex> lock(_instance->m_arcRoutingStateMutex);
 		   m_currentArcRoutingState = ARC_STATE_ARC_TERMINATED;
@@ -1493,6 +1510,7 @@ namespace WPEFramework
 			keyInfo.keyCode     = stoi(keyCode);
 			std::unique_lock<std::mutex> lk(m_sendKeyEventMutex);
 			m_SendKeyQueue.push(keyInfo);
+                        m_sendKeyEventThreadRun = true;
 			m_sendKeyCV.notify_one();
 			LOGINFO("Post send key press event to queue size:%d \n",m_SendKeyQueue.size());
 			returnResponse(true);
@@ -2775,6 +2793,7 @@ namespace WPEFramework
             {
            		LOGWARN("Start Thread %p", smConnection );
 			    m_pollThreadState = POLL_THREAD_STATE_POLL;
+                            m_pollNextState = POLL_THREAD_STATE_NONE;
                             m_pollThreadExit = false;
 				m_pollThread = std::thread(threadRun);
             }
@@ -2830,6 +2849,9 @@ namespace WPEFramework
 		{
 			LOGERR("exception in thread join %s", e.what());
 		}
+
+                m_pollThreadState = POLL_THREAD_STATE_NONE;
+                m_pollNextState = POLL_THREAD_STATE_NONE;
 
 		LOGWARN("Deleted Thread %p", smConnection );
 
@@ -3042,20 +3064,32 @@ namespace WPEFramework
             if(!HdmiCecSink::_instance)
                 return;
 
-            while(1)
+	    SendKeyInfo keyInfo = {-1,-1};
+
+            while(!_instance->m_sendKeyEventThreadExit)
             {
-                SendKeyInfo keyInfo = {-1,-1};
+                keyInfo.logicalAddr = -1;
+                keyInfo.keyCode = -1;
                 {
                     // Wait for a message to be added to the queue
                     std::unique_lock<std::mutex> lk(_instance->m_sendKeyEventMutex);
-                    while (_instance->m_SendKeyQueue.empty())
-                        _instance->m_sendKeyCV.wait(lk);
+                    _instance->m_sendKeyCV.wait(lk, []{return (_instance->m_sendKeyEventThreadRun == true);});
+                }
 
-                    if (_instance->m_SendKeyQueue.empty())
-                        continue;
+                if (_instance->m_sendKeyEventThreadExit == true)
+                {
+                    LOGINFO(" threadSendKeyEvent Exiting");
+                    _instance->m_sendKeyEventThreadRun = false;
+                    break;
+                }
+
+                if (_instance->m_SendKeyQueue.empty()) {
+                    _instance->m_sendKeyEventThreadRun = false;
+                    continue;
+                }
+
                     keyInfo = _instance->m_SendKeyQueue.front();
                     _instance->m_SendKeyQueue.pop();
-                }
 
                 LOGINFO("sendRemoteKeyThread : logical addr:0x%x keyCode: 0x%x  queue size :%d \n",keyInfo.logicalAddr,keyInfo.keyCode,_instance->m_SendKeyQueue.size());
 			    _instance->sendKeyPressEvent(keyInfo.logicalAddr,keyInfo.keyCode);
@@ -3065,12 +3099,7 @@ namespace WPEFramework
 			        _instance->sendGiveAudioStatusMsg();
 			    }
 
-                if (_instance->m_sendKeyEventThreadExit == true)
-                {
-                    LOGINFO(" threadSendKeyEvent Exiting");
-                    break;
-                }
-            }//while(1)
+            }//while(!_instance->m_sendKeyEventThreadExit)
         }//threadSendKeyEvent
 
 
@@ -3183,7 +3212,21 @@ namespace WPEFramework
            _instance->smConnection->sendTo(LogicalAddress::AUDIO_SYSTEM,MessageEncoder().encode(ReportArcTermination()), 1000);
 
        }
-
+       
+      void HdmiCecSink::getHdmiArcPortID()
+      {
+         int err;
+         dsGetHDMIARCPortIdParam_t param;
+         err = IARM_Bus_Call(IARM_BUS_DSMGR_NAME,
+                            (char *)IARM_BUS_DSMGR_API_dsGetHDMIARCPortId,
+                            (void *)&param,
+                            sizeof(param));
+          if (IARM_RESULT_SUCCESS == err)
+          {
+             LOGINFO("HDMI ARC port ID HdmiArcPortID=[%d] \n", param.portId);
+             HdmiArcPortID = param.portId;
+          }
+      }
 
     } // namespace Plugin
 } // namespace WPEFrameworklk

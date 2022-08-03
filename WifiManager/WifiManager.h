@@ -28,8 +28,6 @@
 #include "impl/WifiManagerSignalThreshold.h"
 #include "impl/WifiManagerScan.h"
 #include "impl/WifiManagerEvents.h"
-#include "utils.h"
-#include "AbstractPlugin.h"
 
 namespace WPEFramework {
 
@@ -46,7 +44,7 @@ namespace WPEFramework {
         // As the registration/unregistration of notifications is realized by the class PluginHost::JSONRPC,
         // this class exposes a public method called, Notify(), using this methods, all subscribed clients
         // will receive a JSONRPC message as a notification, in case this method is called.
-        class WifiManager : public WifiManagerInterface, public AbstractPlugin {
+        class WifiManager : public WifiManagerInterface, public PluginHost::IPlugin, public PluginHost::JSONRPC {
         public:
             WifiManager();
             virtual ~WifiManager();
@@ -58,10 +56,10 @@ namespace WPEFramework {
 
             //Begin methods
             virtual uint32_t getQuirks(const JsonObject& parameters, JsonObject& response) const override;
-            virtual uint32_t getCurrentState(const JsonObject& parameters, JsonObject& response) const override;
+            virtual uint32_t getCurrentState(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t startScan(const JsonObject& parameters, JsonObject& response) const override;
             virtual uint32_t stopScan(const JsonObject& parameters, JsonObject& response) override;
-            virtual uint32_t getConnectedSSID(const JsonObject& parameters, JsonObject& response) const override;
+            virtual uint32_t getConnectedSSID(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t setEnabled(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t connect(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t disconnect(const JsonObject& parameters, JsonObject& response) override;
@@ -70,9 +68,9 @@ namespace WPEFramework {
             virtual uint32_t cancelWPSPairing(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t saveSSID(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t clearSSID(const JsonObject& parameters, JsonObject& response) override;
-            virtual uint32_t getPairedSSID(const JsonObject& parameters, JsonObject& response) const override;
-            virtual uint32_t getPairedSSIDInfo(const JsonObject& parameters, JsonObject& response) const override;
-            virtual uint32_t isPaired(const JsonObject& parameters, JsonObject& response) const override;
+            virtual uint32_t getPairedSSID(const JsonObject& parameters, JsonObject& response) override;
+            virtual uint32_t getPairedSSIDInfo(const JsonObject& parameters, JsonObject& response) override;
+            virtual uint32_t isPaired(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t setSignalThresholdChangeEnabled(const JsonObject& parameters, JsonObject& response) override;
             virtual uint32_t isSignalThresholdChangeEnabled(const JsonObject& parameters, JsonObject& response) const;
             virtual uint32_t getSupportedSecurityModes(const JsonObject& parameters, JsonObject& response) override;
@@ -99,6 +97,7 @@ namespace WPEFramework {
 
             uint32_t getApiVersionNumber() const {return apiVersionNumber;};
             void setApiVersionNumber(uint32_t apiVersion) {apiVersionNumber = apiVersion;};
+            bool getConnectedSSID2(const JsonObject &parameters, JsonObject &response);
 
             //Internal methods
             static WifiManager& getInstance();

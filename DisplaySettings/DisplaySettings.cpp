@@ -23,7 +23,6 @@
 #include "DisplaySettings.h"
 #include <algorithm>
 #include "dsMgr.h"
-#include "libIBusDaemon.h"
 #include "host.hpp"
 #include "exception.hpp"
 #include "videoOutputPort.hpp"
@@ -37,8 +36,6 @@
 #include "dsUtl.h"
 #include "dsError.h"
 #include "list.hpp"
-#include "libIBus.h"
-#include "libIBusDaemon.h"
 #include "dsDisplay.h"
 #include "rdk/iarmmgrs-hal/pwrMgr.h"
 #include "pwrMgr.h"
@@ -48,13 +45,13 @@
 #include "tracing/Logging.h"
 #include <syscall.h>
 #include "utils.h"
+#include "UtilsIarm.h"
+#include "UtilsString.h"
 #include "dsError.h"
 
 using namespace std;
 
 #define HDMI_HOT_PLUG_EVENT_CONNECTED 0
-
-#define HDMI_IN_ARC_PORT_ID 1
 
 
 #define HDMICECSINK_CALLSIGN "org.rdk.HdmiCecSink"
@@ -77,7 +74,7 @@ using namespace std;
 
 static bool isCecArcRoutingThreadEnabled = false;
 static bool isCecEnabled = false;
-
+static int  hdmiArcPortId = -1;
 #ifdef USE_IARM
 namespace
 {
@@ -134,6 +131,8 @@ namespace
 }
 #endif
 
+#define registerMethod(...) Register(__VA_ARGS__);GetHandler(2)->Register<JsonObject, JsonObject>(__VA_ARGS__)
+
 namespace WPEFramework {
 
     namespace Plugin {
@@ -144,10 +143,12 @@ namespace WPEFramework {
         IARM_Bus_PWRMgr_PowerState_t DisplaySettings::m_powerState = IARM_BUS_PWRMGR_POWERSTATE_STANDBY;
 
         DisplaySettings::DisplaySettings()
-            : AbstractPlugin(2)
+            : PluginHost::JSONRPC()
         {
             LOGINFO("ctor");
             DisplaySettings::_instance = this;
+
+            CreateHandler({ 2 });
 
             registerMethod("getConnectedVideoDisplays", &DisplaySettings::getConnectedVideoDisplays, this);
             registerMethod("getConnectedAudioPorts", &DisplaySettings::getConnectedAudioPorts, this);
@@ -175,15 +176,15 @@ namespace WPEFramework {
             registerMethod("getVideoPortStatusInStandby", &DisplaySettings::getVideoPortStatusInStandby, this);
             registerMethod("getCurrentOutputSettings", &DisplaySettings::getCurrentOutputSettings, this);
 
-            registerMethod("getVolumeLeveller", &DisplaySettings::getVolumeLeveller, this, {1});
+            Register("getVolumeLeveller", &DisplaySettings::getVolumeLeveller, this);
             registerMethod("getBassEnhancer", &DisplaySettings::getBassEnhancer, this);
             registerMethod("isSurroundDecoderEnabled", &DisplaySettings::isSurroundDecoderEnabled, this);
             registerMethod("getDRCMode", &DisplaySettings::getDRCMode, this);
-            registerMethod("getSurroundVirtualizer", &DisplaySettings::getSurroundVirtualizer, this, {1});
-            registerMethod("setVolumeLeveller", &DisplaySettings::setVolumeLeveller, this, {1});
+            Register("getSurroundVirtualizer", &DisplaySettings::getSurroundVirtualizer, this);
+            Register("setVolumeLeveller", &DisplaySettings::setVolumeLeveller, this);
             registerMethod("setBassEnhancer", &DisplaySettings::setBassEnhancer, this);
             registerMethod("enableSurroundDecoder", &DisplaySettings::enableSurroundDecoder, this);
-            registerMethod("setSurroundVirtualizer", &DisplaySettings::setSurroundVirtualizer, this, {1});
+            Register("setSurroundVirtualizer", &DisplaySettings::setSurroundVirtualizer, this);
             registerMethod("setMISteering", &DisplaySettings::setMISteering, this);
             registerMethod("setGain", &DisplaySettings::setGain, this);
             registerMethod("getGain", &DisplaySettings::getGain, this);
@@ -235,15 +236,16 @@ namespace WPEFramework {
             registerMethod("getSettopAudioCapabilities", &DisplaySettings::getSettopAudioCapabilities, this);
             registerMethod("setMS12ProfileSettingsOverride", &DisplaySettings::setMS12ProfileSettingsOverride,this);
 
-	    registerMethod("getVolumeLeveller", &DisplaySettings::getVolumeLeveller2, this, {2});
-	    registerMethod("setVolumeLeveller", &DisplaySettings::setVolumeLeveller2, this, {2});
-	    registerMethod("getSurroundVirtualizer", &DisplaySettings::getSurroundVirtualizer2, this, {2});
-	    registerMethod("setSurroundVirtualizer", &DisplaySettings::setSurroundVirtualizer2, this, {2});
+            GetHandler(2)->Register<JsonObject, JsonObject>("getVolumeLeveller", &DisplaySettings::getVolumeLeveller2, this);
+            GetHandler(2)->Register<JsonObject, JsonObject>("setVolumeLeveller", &DisplaySettings::setVolumeLeveller2, this);
+            GetHandler(2)->Register<JsonObject, JsonObject>("getSurroundVirtualizer", &DisplaySettings::getSurroundVirtualizer2, this);
+            GetHandler(2)->Register<JsonObject, JsonObject>("setSurroundVirtualizer", &DisplaySettings::setSurroundVirtualizer2, this);
             registerMethod("getVideoFormat", &DisplaySettings::getVideoFormat, this);
 
             registerMethod("setPreferredColorDepth", &DisplaySettings::setPreferredColorDepth, this);
             registerMethod("getPreferredColorDepth", &DisplaySettings::getPreferredColorDepth, this);
             registerMethod("getColorDepthCapabilities", &DisplaySettings::getColorDepthCapabilities, this);
+            
 
 	    m_subscribed = false; //HdmiCecSink event subscription
 	    m_hdmiInAudioDeviceConnected = false;
@@ -321,6 +323,13 @@ namespace WPEFramework {
                         LOG_DEVICE_EXCEPTION1(string("HDMI_ARC0"));
                     } 
                     if (portName == "HDMI_ARC0") {
+                        int portId = -1;
+                        vPort.getHdmiArcPortId(&portId);
+                        if(portId >= 0) {
+                           hdmiArcPortId = portId;
+                           LOGWARN("HDMI ARC port ID hdmiArcPortId=%d\n",hdmiArcPortId);
+                        }
+
                         //Set audio port config. ARC will be set up by onTimer()
                         #ifdef APP_CONTROL_AUDIOPORT_INIT
                         if(isPortPersistenceValEnabled ) {
@@ -399,6 +408,15 @@ namespace WPEFramework {
                                     }
                                     else {
                                         LOGINFO("%s: Connected Device doesn't have ARC/eARC capability... \n", __FUNCTION__);
+                                    //ARC/eARC capability is not recognized even after Audio Device Detection & explicit sendHdmiCecSinkAudioDevicePowerOn
+                                    //Audio device could be in a process of powering on. Trigger Audio device power state request & normal audio routing should resume from onAudioDevicePowerStatusEventHandler
+                                        LOGINFO("Trigger Audio Device Power State Request status ... \n");
+                                        {
+                                           std::lock_guard<std::mutex> lock(m_arcRoutingStateMutex);
+                                           m_hdmiInAudioDevicePowerState = AUDIO_DEVICE_POWER_STATE_REQUEST;
+                                           m_cecArcRoutingThreadRun = true;
+                                           arcRoutingCV.notify_one();
+                                        }
                                     }
                                 }
                                 catch (const device::Exception& err){
@@ -732,7 +750,7 @@ namespace WPEFramework {
 	                return;
             }
 
-		    if(hdmiin_hotplug_port == HDMI_IN_ARC_PORT_ID) { //HDMI ARC/eARC Port Handling
+		    if(hdmiin_hotplug_port == hdmiArcPortId) { //HDMI ARC/eARC Port Handling
 			bool arc_port_enabled =  false;
 
                         JsonObject audioOutputPortConfig = DisplaySettings::_instance->getAudioOutputPortConfig();
@@ -2080,6 +2098,7 @@ namespace WPEFramework {
 	     JsonObject params;
 	     audioFormatToString(audioFormat, params);
              sendNotify("audioFormatChanged", params);
+        GetHandler(2)->Notify("audioFormatChanged", params);
 	}
 
 	void DisplaySettings::notifyVideoFormatChange(dsHDRStandard_t videoFormat)
@@ -2089,6 +2108,7 @@ namespace WPEFramework {
 
             params["supportedVideoFormat"] = getSupportedVideoFormats();
             sendNotify("videoFormatChanged", params);
+        GetHandler(2)->Notify("videoFormatChanged", params);
         }
 
         void DisplaySettings::notifyAssociatedAudioMixingChange(bool mixing)
@@ -2096,6 +2116,7 @@ namespace WPEFramework {
              JsonObject params;
              params["mixing"] = mixing;
              sendNotify("associatedAudioMixingChanged", params);
+            GetHandler(2)->Notify("associatedAudioMixingChanged", params);
         }
 
         void DisplaySettings::notifyFaderControlChange(bool mixerbalance)
@@ -2103,6 +2124,7 @@ namespace WPEFramework {
              JsonObject params;
              params["mixerBalance"] = mixerbalance;
              sendNotify("faderControlChanged", params);
+            GetHandler(2)->Notify("faderControlChanged", params);
         }
 
         void DisplaySettings::notifyPrimaryLanguageChange(std::string pLang)
@@ -2110,6 +2132,7 @@ namespace WPEFramework {
              JsonObject params;
              params["primaryLanguage"] = pLang;
              sendNotify("primaryLanguageChanged", params);
+            GetHandler(2)->Notify("primaryLanguageChanged", params);
         }
 
         void DisplaySettings::notifySecondaryLanguageChange(std::string sLang)
@@ -2117,6 +2140,7 @@ namespace WPEFramework {
              JsonObject params;
              params["secondaryLanguage"] = sLang;
              sendNotify("secondaryLanguageChanged", params);
+            GetHandler(2)->Notify("secondaryLanguageChanged", params);
         }
 
         uint32_t DisplaySettings::getBassEnhancer(const JsonObject& parameters, JsonObject& response)
@@ -2632,6 +2656,10 @@ namespace WPEFramework {
                 float newGain = 0;
                 try {
                         newGain = stof(sGain);
+                        if ((newGain < -2080) || (newGain > 480)) {
+                            LOGERR("Gain value being set to an invalid value newGain: %f \n",newGain);
+                            returnResponse(false);
+                        }
                 }catch (const device::Exception& err) {
                         LOG_DEVICE_EXCEPTION1(sGain);
                         returnResponse(false);
@@ -4033,7 +4061,7 @@ namespace WPEFramework {
                     device::AudioOutputPort aPort = device::Host::getInstance().getAudioOutputPort(audioPort);
 
                     aPort.getSupportedARCTypes(&types);
-                    if((aPort.isConnected()) && (m_hdmiInAudioDeviceConnected == true)) {
+                    if((aPort.isConnected()) && (m_hdmiCecAudioDeviceDetected)) {
                         LOGINFO("DisplaySettings::setEnableAudioPort Configuring User set Audio mode before starting ARC/eARC Playback...\n");
                         if(aPort.getStereoAuto() == true) {
                             if(types & dsAUDIOARCSUPPORT_eARC) {
@@ -4065,9 +4093,14 @@ namespace WPEFramework {
 
                     if(types & dsAUDIOARCSUPPORT_eARC) {
                         if(pEnable) {
-                            LOGINFO("DisplaySettings::setEnableAudioPort Enable eARC !!!");
-                            aPort.enableARC(dsAUDIOARCSUPPORT_eARC, true);
-                            m_arcAudioEnabled = true;
+                            if(m_arcAudioEnabled == false) {
+				LOGINFO("DisplaySettings::setEnableAudioPort Enable eARC !!!");
+                                aPort.enableARC(dsAUDIOARCSUPPORT_eARC, true);
+                                m_arcAudioEnabled = true;
+			    }
+			    else {
+				LOGINFO("eARC is already enabled. Value of m_arcAudioEnabled is %d: \n", m_arcAudioEnabled);
+			    }
                         }
                         else{
                             LOGINFO("DisplaySettings::setEnableAudioPort Disable eARC !!!");
@@ -4083,8 +4116,13 @@ namespace WPEFramework {
 			       // For certain ARC devices, we get ARC initiate message even when ARC device is in standby
 			       // Wake up the device always before audio routing
 			       sendHdmiCecSinkAudioDevicePowerOn();
-                               aPort.enableARC(dsAUDIOARCSUPPORT_ARC, true);
-                               m_arcAudioEnabled = true;
+			       if(m_arcAudioEnabled == false) {
+                                   aPort.enableARC(dsAUDIOARCSUPPORT_ARC, true);
+                                   m_arcAudioEnabled = true;
+			       }
+			       else {
+			           LOGINFO("ARC is already enabled. Value of m_arcAudioEnabled is %d: \n", m_arcAudioEnabled);
+			       }
 			   }
 			   else {
                                LOGINFO("%s: Disable ARC \n",__FUNCTION__);
@@ -4437,9 +4475,11 @@ namespace WPEFramework {
                         }
 
                         if(aPortConfig["HDMI_ARC"].Boolean()) {
-                            LOGINFO("onARCInitiationEventHandler: Enable ARC\n");
-                            aPort.enableARC(dsAUDIOARCSUPPORT_ARC, true);
-                            m_arcAudioEnabled = true;
+                            if(m_arcAudioEnabled == false) {
+			        LOGINFO("onARCInitiationEventHandler: Enable ARC\n");
+                                aPort.enableARC(dsAUDIOARCSUPPORT_ARC, true);
+                                m_arcAudioEnabled = true;
+			    }
                         }
                         else {
                            LOGINFO("onARCInitiationEventHandler: HDMI_ARC0 Port not enabled. Skip Audio Routing !!!\n");
@@ -4977,6 +5017,7 @@ namespace WPEFramework {
         void DisplaySettings::resolutionPreChange()
         {
             sendNotify("resolutionPreChange", JsonObject());
+            GetHandler(2)->Notify("resolutionPreChange", JsonObject());
         }
 
         void DisplaySettings::resolutionChanged(int width, int height)
@@ -5012,6 +5053,7 @@ namespace WPEFramework {
                         params["videoDisplayType"] = display;
                         params["resolution"] = resolution;
                         sendNotify("resolutionChanged", params);
+                        GetHandler(2)->Notify("resolutionChanged", params);
                         return;
                     }
                     else if (!firstResolutionSet)
@@ -5031,6 +5073,7 @@ namespace WPEFramework {
                 params["videoDisplayType"] = firstDisplay;
                 params["resolution"] = firstResolution;
                 sendNotify("resolutionChanged", params);
+                GetHandler(2)->Notify("resolutionChanged", params);
             }
         }
 
@@ -5041,6 +5084,7 @@ namespace WPEFramework {
             params["zoomSetting"] = zoomSetting;
             params["videoDisplayType"] = "all";
             sendNotify("zoomSettingUpdated", params);
+            GetHandler(2)->Notify("zoomSettingUpdated", params);
         }
 
         void DisplaySettings::activeInputChanged(bool activeInput)
@@ -5048,6 +5092,7 @@ namespace WPEFramework {
             JsonObject params;
             params["activeInput"] = activeInput;
             sendNotify("activeInputChanged", params);
+            GetHandler(2)->Notify("activeInputChanged", params);
         }
 
         void DisplaySettings::connectedVideoDisplaysUpdated(int hdmiHotPlugEvent)
@@ -5071,6 +5116,7 @@ namespace WPEFramework {
                 JsonObject params;
                 params["connectedVideoDisplays"] = connectedDisplays;
                 sendNotify("connectedVideoDisplaysUpdated", params);
+                GetHandler(2)->Notify("connectedVideoDisplaysUpdated", params);
             }
             previousStatus = hdmiHotPlugEvent;
         }
@@ -5108,6 +5154,7 @@ namespace WPEFramework {
             }
             LOGWARN ("Thunder sends notification %s audio port hotplug status %s", sPortName.c_str(), sPortStatus.c_str());
             sendNotify("connectedAudioPortUpdated", params);
+            GetHandler(2)->Notify("connectedAudioPortUpdated", params);
         }
 
         //End events

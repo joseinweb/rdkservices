@@ -23,9 +23,10 @@
 #include <vector>
 
 #include "Module.h"
-#include "tptimer.h"
-#include "utils.h"
-#include "AbstractPlugin.h"
+
+#if defined(PLATFORM_AMLOGIC)
+#include <interfaces/ICapture.h>
+#endif
 
 namespace WPEFramework {
 
@@ -33,6 +34,17 @@ namespace WPEFramework {
 
         class ScreenCapture;
 
+#if defined(PLATFORM_AMLOGIC)
+        struct ScreenCaptureStore: public Exchange::ICapture::IStore {
+            ScreenCaptureStore(WPEFramework::Plugin::ScreenCapture* sc) : m_screenCapture(sc) {}
+            ScreenCaptureStore(const ScreenCaptureStore& copy) : m_screenCapture(copy.m_screenCapture) { }
+            ~ScreenCaptureStore() {}
+            virtual bool R8_G8_B8_A8(const unsigned char* buffer, const unsigned int width, const unsigned int height) override;
+        private:
+            ScreenCaptureStore() = delete;
+            WPEFramework::Plugin::ScreenCapture* m_screenCapture;
+        };
+#else
         class ScreenShotJob
         {
         private:
@@ -55,7 +67,7 @@ namespace WPEFramework {
         private:
             WPEFramework::Plugin::ScreenCapture* m_screenCapture;
         };
-
+#endif
         // This is a server for a JSONRPC communication channel.
         // For a plugin to be capable to handle JSONRPC, inherit from PluginHost::JSONRPC.
         // By inheriting from this class, the plugin realizes the interface PluginHost::IDispatcher.
@@ -68,16 +80,13 @@ namespace WPEFramework {
         // As the registration/unregistration of notifications is realized by the class PluginHost::JSONRPC,
         // this class exposes a public method called, Notify(), using this methods, all subscribed clients
         // will receive a JSONRPC message as a notification, in case this method is called.
-        class ScreenCapture : public AbstractPlugin {
+        class ScreenCapture : public PluginHost::IPlugin, public PluginHost::JSONRPC {
         private:
 
             // We do not allow this plugin to be copied !!
             ScreenCapture(const ScreenCapture&) = delete;
             ScreenCapture& operator=(const ScreenCapture&) = delete;
-
-#if defined(PLATFORM_AMLOGIC)
-            void pluginEventHandler(const JsonObject& parameters);
-#endif
+         
             //Begin methods
             uint32_t uploadScreenCapture(const JsonObject& parameters, JsonObject& response);
             //End methods
@@ -105,23 +114,32 @@ namespace WPEFramework {
             virtual ~ScreenCapture();
             virtual const string Initialize(PluginHost::IShell*) override;
             virtual void Deinitialize(PluginHost::IShell* service) override;
+            virtual string Information() const override { return {}; }
 
+            BEGIN_INTERFACE_MAP(ScreenCapture)
+            INTERFACE_ENTRY(PluginHost::IPlugin)
+            INTERFACE_ENTRY(PluginHost::IDispatcher)
+            END_INTERFACE_MAP
+
+#if defined(PLATFORM_AMLOGIC)
+            void onScreenCaptureData(const unsigned char* buffer, const unsigned int width, const unsigned int height);
+#endif
         private:
             std::mutex m_callMutex;
 
+#if defined(PLATFORM_AMLOGIC)
+            PluginHost::IPlugin *m_RDKShellRef;
+            Exchange::ICapture *m_captureRef;
+            ScreenCaptureStore m_screenCaptureStore;
+#else
             WPEFramework::Core::TimerType<ScreenShotJob> *screenShotDispatcher;
-
+#endif
             std::string url;
             std::string callGUID;
 
             #ifdef PLATFORM_BROADCOM
             bool inNexus;
             #endif
-
-#if defined(PLATFORM_AMLOGIC)
-            size_t screenWidth;
-            size_t screenHeight;
-#endif   
 
             friend class ScreenShotJob;
         };

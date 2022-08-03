@@ -29,6 +29,7 @@
 #include <rdkshell/compositorcontroller.h>
 #include <rdkshell/application.h>
 #include <rdkshell/logger.h>
+#include <interfaces/IFocus.h>
 #include <interfaces/IMemory.h>
 #include <interfaces/IBrowser.h>
 #include <rdkshell/logger.h>
@@ -118,10 +119,14 @@ const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_SCREENSHOT = "g
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_ENABLE_EASTER_EGGS = "enableEasterEggs";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_ENABLE_LOGS_FLUSHING = "enableLogsFlushing";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_LOGS_FLUSHING_ENABLED = "getLogsFlushingEnabled";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_ADD_EASTER_EGGS = "addEasterEggs";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_REMOVE_EASTER_EGGS = "removeEasterEggs";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_EASTER_EGGS = "getEasterEggs";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_SHOW_CURSOR = "showCursor";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_HIDE_CURSOR = "hideCursor";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_GET_CURSOR_SIZE = "getCursorSize";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_SET_CURSOR_SIZE = "setCursorSize";
+const string WPEFramework::Plugin::RDKShell::RDKSHELL_METHOD_ENABLE_INPUT_EVENTS = "enableInputEvents";
 
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_USER_INACTIVITY = "onUserInactivity";
 const string WPEFramework::Plugin::RDKShell::RDKSHELL_EVENT_ON_APP_LAUNCHED = "onApplicationLaunched";
@@ -600,6 +605,13 @@ namespace WPEFramework {
 	  }
        }
 
+        std::string toLower(const std::string& clientName)
+        {
+            std::string displayName = clientName;
+            std::transform(displayName.begin(), displayName.end(), displayName.begin(), [](unsigned char c){ return std::tolower(c); });
+            return displayName;
+        }
+
         void RDKShell::MonitorClients::StateChange(PluginHost::IShell* service)
         {
             if (service)
@@ -772,90 +784,115 @@ namespace WPEFramework {
             }
         }
 
+        bool RDKShell::ScreenCapture::Capture(ICapture::IStore& storer)
+        {
+            mCaptureStorers.push_back(&storer);
+
+            JsonObject parameters, response;
+            mShell->getScreenshotWrapper(parameters, response);
+            return true;
+        }
+
+        void RDKShell::ScreenCapture::onScreenCapture(const unsigned char *data, unsigned int width, unsigned int height)
+        {
+            if (mCaptureStorers.size() > 0)
+            {
+                for (unsigned int n = 0; n < mCaptureStorers.size(); n++)
+                {    
+                    mCaptureStorers[n]->R8_G8_B8_A8(data, width, height);
+                }
+                mCaptureStorers.clear();
+            }
+        }
+
         RDKShell::RDKShell()
-                : AbstractPlugin(API_VERSION_NUMBER_MAJOR), mClientsMonitor(Core::Service<MonitorClients>::Create<MonitorClients>(this)), mEnableUserInactivityNotification(true), mCurrentService(nullptr), mLastWakeupKeyCode(0), mLastWakeupKeyModifiers(0), mLastWakeupKeyTimestamp(0), mEnableEasterEggs(true)
+                : PluginHost::JSONRPC(), mClientsMonitor(Core::Service<MonitorClients>::Create<MonitorClients>(this)), mEnableUserInactivityNotification(true), mCurrentService(nullptr), mLastWakeupKeyCode(0), mLastWakeupKeyModifiers(0), mLastWakeupKeyTimestamp(0), mEnableEasterEggs(true), mScreenCapture(this)
         {
             LOGINFO("ctor");
             RDKShell::_instance = this;
             mEventListener = std::make_shared<RdkShellListener>(this);
 
             mRemoteShell = false;
-            registerMethod(RDKSHELL_METHOD_MOVE_TO_FRONT, &RDKShell::moveToFrontWrapper, this);
-            registerMethod(RDKSHELL_METHOD_MOVE_TO_BACK, &RDKShell::moveToBackWrapper, this);
-            registerMethod(RDKSHELL_METHOD_MOVE_BEHIND, &RDKShell::moveBehindWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_FOCUS, &RDKShell::setFocusWrapper, this);
-            registerMethod(RDKSHELL_METHOD_KILL, &RDKShell::killWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ADD_KEY_INTERCEPT, &RDKShell::addKeyInterceptWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ADD_KEY_INTERCEPTS, &RDKShell::addKeyInterceptsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_REMOVE_KEY_INTERCEPT, &RDKShell::removeKeyInterceptWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ADD_KEY_LISTENER, &RDKShell::addKeyListenersWrapper, this);
-            registerMethod(RDKSHELL_METHOD_REMOVE_KEY_LISTENER, &RDKShell::removeKeyListenersWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ADD_KEY_METADATA_LISTENER, &RDKShell::addKeyMetadataListenerWrapper, this);
-            registerMethod(RDKSHELL_METHOD_REMOVE_KEY_METADATA_LISTENER, &RDKShell::removeKeyMetadataListenerWrapper, this);
-            registerMethod(RDKSHELL_METHOD_INJECT_KEY, &RDKShell::injectKeyWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GENERATE_KEYS, &RDKShell::generateKeyWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_SCREEN_RESOLUTION, &RDKShell::getScreenResolutionWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_SCREEN_RESOLUTION, &RDKShell::setScreenResolutionWrapper, this);
-            registerMethod(RDKSHELL_METHOD_CREATE_DISPLAY, &RDKShell::createDisplayWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_CLIENTS, &RDKShell::getClientsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_Z_ORDER, &RDKShell::getZOrderWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_BOUNDS, &RDKShell::getBoundsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_BOUNDS, &RDKShell::setBoundsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_VISIBILITY, &RDKShell::getVisibilityWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_VISIBILITY, &RDKShell::setVisibilityWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_OPACITY, &RDKShell::getOpacityWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_OPACITY, &RDKShell::setOpacityWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_SCALE, &RDKShell::getScaleWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_SCALE, &RDKShell::setScaleWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_HOLE_PUNCH, &RDKShell::getHolePunchWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_HOLE_PUNCH, &RDKShell::setHolePunchWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_LOG_LEVEL, &RDKShell::getLogLevelWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_LOG_LEVEL, &RDKShell::setLogLevelWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SHOW_SPLASH_LOGO, &RDKShell::showSplashLogoWrapper, this);
-            registerMethod(RDKSHELL_METHOD_HIDE_SPLASH_LOGO, &RDKShell::hideSplashLogoWrapper, this);
-            registerMethod(RDKSHELL_METHOD_REMOVE_ANIMATION, &RDKShell::removeAnimationWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ADD_ANIMATION, &RDKShell::addAnimationWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ENABLE_INACTIVITY_REPORTING, &RDKShell::enableInactivityReportingWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_INACTIVITY_INTERVAL, &RDKShell::setInactivityIntervalWrapper, this);
-            registerMethod(RDKSHELL_METHOD_RESET_INACTIVITY_TIME, &RDKShell::resetInactivityTimeWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SCALE_TO_FIT, &RDKShell::scaleToFitWrapper, this);
-            registerMethod(RDKSHELL_METHOD_LAUNCH, &RDKShell::launchWrapper, this);
-            registerMethod(RDKSHELL_METHOD_LAUNCH_APP, &RDKShell::launchApplicationWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SUSPEND, &RDKShell::suspendWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SUSPEND_APP, &RDKShell::suspendApplicationWrapper, this);
-            registerMethod(RDKSHELL_METHOD_RESUME_APP, &RDKShell::resumeApplicationWrapper, this);
-            registerMethod(RDKSHELL_METHOD_DESTROY, &RDKShell::destroyWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_AVAILABLE_TYPES, &RDKShell::getAvailableTypesWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_STATE, &RDKShell::getState, this);
-            registerMethod(RDKSHELL_METHOD_GET_SYSTEM_MEMORY, &RDKShell::getSystemMemoryWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_SYSTEM_RESOURCE_INFO, &RDKShell::getSystemResourceInfoWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_MEMORY_MONITOR, &RDKShell::setMemoryMonitorWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SHOW_WATERMARK, &RDKShell::showWatermarkWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SHOW_FULL_SCREEN_IMAGE, &RDKShell::showFullScreenImageWrapper, this);
-            registerMethod(RDKSHELL_METHOD_HIDE_FULL_SCREEN_IMAGE, &RDKShell::hideFullScreenImageWrapper, this);
-            registerMethod(RDKSHELL_METHOD_LAUNCH_FACTORY_APP, &RDKShell::launchFactoryAppWrapper, this);
-            registerMethod(RDKSHELL_METHOD_LAUNCH_FACTORY_APP_SHORTCUT, &RDKShell::launchFactoryAppShortcutWrapper, this);
-            registerMethod(RDKSHELL_METHOD_LAUNCH_RESIDENT_APP, &RDKShell::launchResidentAppWrapper, this);
-            registerMethod(RDKSHELL_METHOD_TOGGLE_FACTORY_APP, &RDKShell::toggleFactoryAppWrapper, this);
-            registerMethod(RDKSHELL_METHOD_EXIT_AGING_MODE, &RDKShell::exitAgingModeWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ENABLE_KEYREPEATS, &RDKShell::enableKeyRepeatsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_KEYREPEATS_ENABLED, &RDKShell::getKeyRepeatsEnabledWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_TOPMOST, &RDKShell::setTopmostWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_VIRTUAL_RESOLUTION, &RDKShell::getVirtualResolutionWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_VIRTUAL_RESOLUTION, &RDKShell::setVirtualResolutionWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ENABLE_VIRTUAL_DISPLAY, &RDKShell::enableVirtualDisplayWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_VIRTUAL_DISPLAY_ENABLED, &RDKShell::getVirtualDisplayEnabledWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_LAST_WAKEUP_KEY, &RDKShell::getLastWakeupKeyWrapper, this);            
-            registerMethod(RDKSHELL_METHOD_HIDE_ALL_CLIENTS, &RDKShell::hideAllClientsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_SCREENSHOT, &RDKShell::getScreenshotWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ENABLE_EASTER_EGGS, &RDKShell::enableEasterEggsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_ENABLE_LOGS_FLUSHING, &RDKShell::enableLogsFlushingWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_LOGS_FLUSHING_ENABLED, &RDKShell::getLogsFlushingEnabledWrapper, this);
-            registerMethod(RDKSHELL_METHOD_IGNORE_KEY_INPUTS, &RDKShell::ignoreKeyInputsWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SHOW_CURSOR, &RDKShell::showCursorWrapper, this);
-            registerMethod(RDKSHELL_METHOD_HIDE_CURSOR, &RDKShell::hideCursorWrapper, this);
-            registerMethod(RDKSHELL_METHOD_GET_CURSOR_SIZE, &RDKShell::getCursorSizeWrapper, this);
-            registerMethod(RDKSHELL_METHOD_SET_CURSOR_SIZE, &RDKShell::setCursorSizeWrapper, this);
+            Register(RDKSHELL_METHOD_MOVE_TO_FRONT, &RDKShell::moveToFrontWrapper, this);
+            Register(RDKSHELL_METHOD_MOVE_TO_BACK, &RDKShell::moveToBackWrapper, this);
+            Register(RDKSHELL_METHOD_MOVE_BEHIND, &RDKShell::moveBehindWrapper, this);
+            Register(RDKSHELL_METHOD_SET_FOCUS, &RDKShell::setFocusWrapper, this);
+            Register(RDKSHELL_METHOD_KILL, &RDKShell::killWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_KEY_INTERCEPT, &RDKShell::addKeyInterceptWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_KEY_INTERCEPTS, &RDKShell::addKeyInterceptsWrapper, this);
+            Register(RDKSHELL_METHOD_REMOVE_KEY_INTERCEPT, &RDKShell::removeKeyInterceptWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_KEY_LISTENER, &RDKShell::addKeyListenersWrapper, this);
+            Register(RDKSHELL_METHOD_REMOVE_KEY_LISTENER, &RDKShell::removeKeyListenersWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_KEY_METADATA_LISTENER, &RDKShell::addKeyMetadataListenerWrapper, this);
+            Register(RDKSHELL_METHOD_REMOVE_KEY_METADATA_LISTENER, &RDKShell::removeKeyMetadataListenerWrapper, this);
+            Register(RDKSHELL_METHOD_INJECT_KEY, &RDKShell::injectKeyWrapper, this);
+            Register(RDKSHELL_METHOD_GENERATE_KEYS, &RDKShell::generateKeyWrapper, this);
+            Register(RDKSHELL_METHOD_GET_SCREEN_RESOLUTION, &RDKShell::getScreenResolutionWrapper, this);
+            Register(RDKSHELL_METHOD_SET_SCREEN_RESOLUTION, &RDKShell::setScreenResolutionWrapper, this);
+            Register(RDKSHELL_METHOD_CREATE_DISPLAY, &RDKShell::createDisplayWrapper, this);
+            Register(RDKSHELL_METHOD_GET_CLIENTS, &RDKShell::getClientsWrapper, this);
+            Register(RDKSHELL_METHOD_GET_Z_ORDER, &RDKShell::getZOrderWrapper, this);
+            Register(RDKSHELL_METHOD_GET_BOUNDS, &RDKShell::getBoundsWrapper, this);
+            Register(RDKSHELL_METHOD_SET_BOUNDS, &RDKShell::setBoundsWrapper, this);
+            Register(RDKSHELL_METHOD_GET_VISIBILITY, &RDKShell::getVisibilityWrapper, this);
+            Register(RDKSHELL_METHOD_SET_VISIBILITY, &RDKShell::setVisibilityWrapper, this);
+            Register(RDKSHELL_METHOD_GET_OPACITY, &RDKShell::getOpacityWrapper, this);
+            Register(RDKSHELL_METHOD_SET_OPACITY, &RDKShell::setOpacityWrapper, this);
+            Register(RDKSHELL_METHOD_GET_SCALE, &RDKShell::getScaleWrapper, this);
+            Register(RDKSHELL_METHOD_SET_SCALE, &RDKShell::setScaleWrapper, this);
+            Register(RDKSHELL_METHOD_GET_HOLE_PUNCH, &RDKShell::getHolePunchWrapper, this);
+            Register(RDKSHELL_METHOD_SET_HOLE_PUNCH, &RDKShell::setHolePunchWrapper, this);
+            Register(RDKSHELL_METHOD_GET_LOG_LEVEL, &RDKShell::getLogLevelWrapper, this);
+            Register(RDKSHELL_METHOD_SET_LOG_LEVEL, &RDKShell::setLogLevelWrapper, this);
+            Register(RDKSHELL_METHOD_SHOW_SPLASH_LOGO, &RDKShell::showSplashLogoWrapper, this);
+            Register(RDKSHELL_METHOD_HIDE_SPLASH_LOGO, &RDKShell::hideSplashLogoWrapper, this);
+            Register(RDKSHELL_METHOD_REMOVE_ANIMATION, &RDKShell::removeAnimationWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_ANIMATION, &RDKShell::addAnimationWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_INACTIVITY_REPORTING, &RDKShell::enableInactivityReportingWrapper, this);
+            Register(RDKSHELL_METHOD_SET_INACTIVITY_INTERVAL, &RDKShell::setInactivityIntervalWrapper, this);
+            Register(RDKSHELL_METHOD_RESET_INACTIVITY_TIME, &RDKShell::resetInactivityTimeWrapper, this);
+            Register(RDKSHELL_METHOD_SCALE_TO_FIT, &RDKShell::scaleToFitWrapper, this);
+            Register(RDKSHELL_METHOD_LAUNCH, &RDKShell::launchWrapper, this);
+            Register(RDKSHELL_METHOD_LAUNCH_APP, &RDKShell::launchApplicationWrapper, this);
+            Register(RDKSHELL_METHOD_SUSPEND, &RDKShell::suspendWrapper, this);
+            Register(RDKSHELL_METHOD_SUSPEND_APP, &RDKShell::suspendApplicationWrapper, this);
+            Register(RDKSHELL_METHOD_RESUME_APP, &RDKShell::resumeApplicationWrapper, this);
+            Register(RDKSHELL_METHOD_DESTROY, &RDKShell::destroyWrapper, this);
+            Register(RDKSHELL_METHOD_GET_AVAILABLE_TYPES, &RDKShell::getAvailableTypesWrapper, this);
+            Register(RDKSHELL_METHOD_GET_STATE, &RDKShell::getState, this);
+            Register(RDKSHELL_METHOD_GET_SYSTEM_MEMORY, &RDKShell::getSystemMemoryWrapper, this);
+            Register(RDKSHELL_METHOD_GET_SYSTEM_RESOURCE_INFO, &RDKShell::getSystemResourceInfoWrapper, this);
+            Register(RDKSHELL_METHOD_SET_MEMORY_MONITOR, &RDKShell::setMemoryMonitorWrapper, this);
+            Register(RDKSHELL_METHOD_SHOW_WATERMARK, &RDKShell::showWatermarkWrapper, this);
+            Register(RDKSHELL_METHOD_SHOW_FULL_SCREEN_IMAGE, &RDKShell::showFullScreenImageWrapper, this);
+            Register(RDKSHELL_METHOD_HIDE_FULL_SCREEN_IMAGE, &RDKShell::hideFullScreenImageWrapper, this);
+            Register(RDKSHELL_METHOD_LAUNCH_FACTORY_APP, &RDKShell::launchFactoryAppWrapper, this);
+            Register(RDKSHELL_METHOD_LAUNCH_FACTORY_APP_SHORTCUT, &RDKShell::launchFactoryAppShortcutWrapper, this);
+            Register(RDKSHELL_METHOD_LAUNCH_RESIDENT_APP, &RDKShell::launchResidentAppWrapper, this);
+            Register(RDKSHELL_METHOD_TOGGLE_FACTORY_APP, &RDKShell::toggleFactoryAppWrapper, this);
+            Register(RDKSHELL_METHOD_EXIT_AGING_MODE, &RDKShell::exitAgingModeWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_KEYREPEATS, &RDKShell::enableKeyRepeatsWrapper, this);
+            Register(RDKSHELL_METHOD_GET_KEYREPEATS_ENABLED, &RDKShell::getKeyRepeatsEnabledWrapper, this);
+            Register(RDKSHELL_METHOD_SET_TOPMOST, &RDKShell::setTopmostWrapper, this);
+            Register(RDKSHELL_METHOD_GET_VIRTUAL_RESOLUTION, &RDKShell::getVirtualResolutionWrapper, this);
+            Register(RDKSHELL_METHOD_SET_VIRTUAL_RESOLUTION, &RDKShell::setVirtualResolutionWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_VIRTUAL_DISPLAY, &RDKShell::enableVirtualDisplayWrapper, this);
+            Register(RDKSHELL_METHOD_GET_VIRTUAL_DISPLAY_ENABLED, &RDKShell::getVirtualDisplayEnabledWrapper, this);
+            Register(RDKSHELL_METHOD_GET_LAST_WAKEUP_KEY, &RDKShell::getLastWakeupKeyWrapper, this);            
+            Register(RDKSHELL_METHOD_HIDE_ALL_CLIENTS, &RDKShell::hideAllClientsWrapper, this);
+            Register(RDKSHELL_METHOD_GET_SCREENSHOT, &RDKShell::getScreenshotWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_EASTER_EGGS, &RDKShell::enableEasterEggsWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_LOGS_FLUSHING, &RDKShell::enableLogsFlushingWrapper, this);
+            Register(RDKSHELL_METHOD_GET_LOGS_FLUSHING_ENABLED, &RDKShell::getLogsFlushingEnabledWrapper, this);
+            Register(RDKSHELL_METHOD_IGNORE_KEY_INPUTS, &RDKShell::ignoreKeyInputsWrapper, this);
+            Register(RDKSHELL_METHOD_SHOW_CURSOR, &RDKShell::showCursorWrapper, this);
+            Register(RDKSHELL_METHOD_HIDE_CURSOR, &RDKShell::hideCursorWrapper, this);
+            Register(RDKSHELL_METHOD_GET_CURSOR_SIZE, &RDKShell::getCursorSizeWrapper, this);
+            Register(RDKSHELL_METHOD_SET_CURSOR_SIZE, &RDKShell::setCursorSizeWrapper, this);
+            Register(RDKSHELL_METHOD_ADD_EASTER_EGGS, &RDKShell::addEasterEggsWrapper, this);
+            Register(RDKSHELL_METHOD_REMOVE_EASTER_EGGS, &RDKShell::removeEasterEggsWrapper, this);
+            Register(RDKSHELL_METHOD_GET_EASTER_EGGS, &RDKShell::getEasterEggsWrapper, this);
+            Register(RDKSHELL_METHOD_ENABLE_INPUT_EVENTS, &RDKShell::enableInputEventsWrapper, this);
       	    m_timer.connect(std::bind(&RDKShell::onTimer, this));
         }
 
@@ -1138,7 +1175,7 @@ namespace WPEFramework {
                   if (needsScreenshot)
                   {
                       uint8_t* data = nullptr;
-                      size_t size;
+                      uint32_t size;
                       string screenshotBase64;
                       CompositorController::screenShot(data, size);
                       size_t encodedImageSize = b64_get_encoded_buffer_size(size);
@@ -1156,6 +1193,10 @@ namespace WPEFramework {
                       // Calling Notify instead of  RDKShell::notify to avoid logging of entire screen content
                       LOGINFO("Notify %s", RDKSHELL_EVENT_ON_SCREENSHOT_COMPLETE.c_str());
                       Notify(RDKSHELL_EVENT_ON_SCREENSHOT_COMPLETE, params);
+
+                      unsigned int width = 0,height = 0;
+                      if (CompositorController::getScreenResolution(width, height))
+                          mScreenCapture.onScreenCapture(&data[0], width, height);
 
                       free(encodedImage);
                       free(data);
@@ -1341,6 +1382,7 @@ namespace WPEFramework {
         {
             LOGINFO("Deinitialize");
             gRdkShellMutex.lock();
+            RdkShell::deinitialize();
             sRunning = false;
             gRdkShellMutex.unlock();
             shellThread.join();
@@ -1505,35 +1547,43 @@ namespace WPEFramework {
           mShell.notify(RDKSHELL_EVENT_ON_USER_INACTIVITY, params);
         }
 
-        void RDKShell::RdkShellListener::onDeviceLowRamWarning(const int32_t freeKb)
+        void RDKShell::RdkShellListener::onDeviceLowRamWarning(const int32_t freeKb, const int32_t availableKb, const int32_t usedSwapKb)
         {
-          std::cout << "RDKShell onDeviceLowRamWarning event received ..." << freeKb << std::endl;
+          std::cout << "RDKShell onDeviceLowRamWarning event received ..." << "free memory - " << freeKb << ", available memory - " << availableKb << ", swap used - " << usedSwapKb << std::endl;
           JsonObject params;
           params["ram"] = freeKb;
+          params["availablememory"] = availableKb;
+          params["usedswap"] = usedSwapKb;
           mShell.notify(RDKSHELL_EVENT_DEVICE_LOW_RAM_WARNING, params);
         }
 
-        void RDKShell::RdkShellListener::onDeviceCriticallyLowRamWarning(const int32_t freeKb)
+        void RDKShell::RdkShellListener::onDeviceCriticallyLowRamWarning(const int32_t freeKb, const int32_t availableKb, const int32_t usedSwapKb)
         {
-          std::cout << "RDKShell onDeviceCriticallyLowRamWarning event received ..." << freeKb << std::endl;
+          std::cout << "RDKShell onDeviceCriticallyLowRamWarning event received ..." << "free memory - " << freeKb << ", available memory - " << availableKb << ", swap used - " << usedSwapKb << std::endl;
           JsonObject params;
           params["ram"] = freeKb;
+          params["availablememory"] = availableKb;
+          params["usedswap"] = usedSwapKb;
           mShell.notify(RDKSHELL_EVENT_DEVICE_CRITICALLY_LOW_RAM_WARNING, params);
         }
 
-        void RDKShell::RdkShellListener::onDeviceLowRamWarningCleared(const int32_t freeKb)
+        void RDKShell::RdkShellListener::onDeviceLowRamWarningCleared(const int32_t freeKb, const int32_t availableKb, const int32_t usedSwapKb)
         {
-          std::cout << "RDKShell onDeviceLowRamWarningCleared event received ..." << freeKb << std::endl;
+          std::cout << "RDKShell onDeviceLowRamWarningCleared event received ..." << "free memory - " << freeKb << ", available memory - " << availableKb << ", swap used - " << usedSwapKb << std::endl;
           JsonObject params;
           params["ram"] = freeKb;
+          params["availablememory"] = availableKb;
+          params["usedswap"] = usedSwapKb;
           mShell.notify(RDKSHELL_EVENT_DEVICE_LOW_RAM_WARNING_CLEARED, params);
         }
 
-        void RDKShell::RdkShellListener::onDeviceCriticallyLowRamWarningCleared(const int32_t freeKb)
+        void RDKShell::RdkShellListener::onDeviceCriticallyLowRamWarningCleared(const int32_t freeKb, const int32_t availableKb, const int32_t usedSwapKb)
         {
-          std::cout << "RDKShell onDeviceCriticallyLowRamWarningCleared event received ..." << freeKb << std::endl;
+          std::cout << "RDKShell onDeviceCriticallyLowRamWarningCleared event received ..." << "free memory - " << freeKb << ", available memory - " << availableKb << ", swap used - " << usedSwapKb << std::endl;
           JsonObject params;
           params["ram"] = freeKb;
+          params["availablememory"] = availableKb;
+          params["usedswap"] = usedSwapKb;
           mShell.notify(RDKSHELL_EVENT_DEVICE_CRITICALLY_LOW_RAM_WARNING_CLEARED, params);
         }
 
@@ -2810,6 +2860,7 @@ namespace WPEFramework {
         uint32_t RDKShell::hideSplashLogoWrapper(const JsonObject& parameters, JsonObject& response)
         {
             LOGINFOMETHOD();
+            LOG_MILESTONE("HIDE_SPLASH_SCREEN");
             bool result = true;
 
             lockRdkShellMutex();
@@ -3036,6 +3087,10 @@ namespace WPEFramework {
             if (result)
             {
                 appCallsign = parameters["callsign"].String();
+                if (appCallsign.compare("SearchAndDiscovery") == 0)
+                {
+                    LOG_MILESTONE("PLUI_LAUNCH_START");
+                }
                 bool isApplicationBeingDestroyed = false;
                 gLaunchDestroyMutex.lock();
                 if (gDestroyApplications.find(appCallsign) != gDestroyApplications.end())
@@ -4339,8 +4394,8 @@ namespace WPEFramework {
         {
             LOGINFOMETHOD();
             bool result = true;
-            uint32_t freeKb=0, usedSwapKb=0, totalKb=0;
-            result = systemMemory(freeKb, totalKb, usedSwapKb);
+            uint32_t freeKb=0, usedSwapKb=0, totalKb=0, availableKb=0;
+            result = systemMemory(freeKb, totalKb, availableKb, usedSwapKb);
             if (!result) {
               response["message"] = "failed to get system Ram";
             }
@@ -4349,6 +4404,7 @@ namespace WPEFramework {
               response["freeRam"] = freeKb;
               response["swapRam"] = usedSwapKb;
               response["totalRam"] = totalKb;
+              response["availablememory"] = availableKb;
             }
             returnResponse(result);
         }
@@ -5323,6 +5379,29 @@ namespace WPEFramework {
             }
             returnResponse(ret);
         }
+
+        uint32_t RDKShell::enableInputEventsWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            bool result = true;
+
+            if (!parameters.HasLabel("clients"))
+            {
+                response["message"] = "please specify clients parameter";
+                result = false;
+            }
+            else if (!parameters.HasLabel("enable"))
+            {
+                response["message"] = "please specify enable parameter";
+                result = false;
+            }
+            else
+            {
+                result = enableInputEvents(parameters["clients"].Array(), parameters["enable"].Boolean());
+            }
+
+            returnResponse(result);
+        }
         // Registered methods end
 
         // Events begin
@@ -5386,10 +5465,9 @@ namespace WPEFramework {
                 JsonObject joAgingResult;
                 joAgingParams.Set("namespace","FactoryTest");
                 joAgingParams.Set("key","AgingState");
-                std::string agingGetInvoke = "org.rdk.PersistentStore.1.getValue";
 
                 std::cout << "attempting to check aging state \n";
-                uint32_t status = getThunderControllerClient()->Invoke(RDKSHELL_THUNDER_TIMEOUT, agingGetInvoke.c_str(), joAgingParams, joAgingResult);
+                uint32_t status = JSONRPCDirectLink(mCurrentService, PERSISTENT_STORE_CALLSIGN).Invoke<JsonObject, JsonObject>(RDKSHELL_THUNDER_TIMEOUT, "getValue", joAgingParams, joAgingResult);
                 std::cout << "get status for aging state: " << status << std::endl;
 
                 if ((status == 0) && (joAgingResult.HasLabel("value")))
@@ -5409,7 +5487,7 @@ namespace WPEFramework {
                 joFactoryModeParams.Set("key","FactoryMode");
 
                 std::cout << "attempting to check factory mode \n";
-                status = getThunderControllerClient()->Invoke(RDKSHELL_THUNDER_TIMEOUT, agingGetInvoke.c_str(), joFactoryModeParams, joFactoryModeResult);
+                status = JSONRPCDirectLink(mCurrentService, PERSISTENT_STORE_CALLSIGN).Invoke<JsonObject, JsonObject>(RDKSHELL_THUNDER_TIMEOUT, "getValue", joFactoryModeParams, joFactoryModeResult);
                 std::cout << "get status for factory mode: " << status << std::endl;
 
                 if ((status == 0) && (joFactoryModeResult.HasLabel("value")))
@@ -5512,9 +5590,68 @@ namespace WPEFramework {
         bool RDKShell::setFocus(const string& client)
         {
             bool ret = false;
+            bool isApplicationBeingDestroyed = false;
+            gLaunchDestroyMutex.lock();
+            if (gDestroyApplications.find(client) != gDestroyApplications.end())
+            {
+                isApplicationBeingDestroyed = true;
+            }
+            gLaunchDestroyMutex.unlock();
+            if (isApplicationBeingDestroyed)
+            {
+                std::cout << "ignoring setFocus for " << client << " as it is being destroyed " << std::endl;
+                return false;
+            }
+            std::string previousFocusedClient;
             lockRdkShellMutex();
+            CompositorController::getFocused(previousFocusedClient);
             ret = CompositorController::setFocus(client);
             gRdkShellMutex.unlock();
+            std::string clientLower = toLower(client);
+
+            if (previousFocusedClient != clientLower)
+            {
+                std::map<std::string, PluginData> activePluginsData;
+                gPluginDataMutex.lock();
+                activePluginsData = gActivePluginsData;
+                gPluginDataMutex.unlock();
+
+                if (!previousFocusedClient.empty())
+                {
+                    std::map<std::string, PluginData>::iterator previousFocusedIterator;
+
+                    for (previousFocusedIterator = activePluginsData.begin(); previousFocusedIterator != activePluginsData.end(); previousFocusedIterator++)
+                    {
+                        std::string compositorName = toLower(previousFocusedIterator->first);
+                        if (compositorName == previousFocusedClient)
+                        {
+                            std::cout << "setting the focus of " << compositorName << " to false " << std::endl;
+                            Exchange::IFocus *focusedCallsign = mCurrentService->QueryInterfaceByCallsign<Exchange::IFocus>(previousFocusedIterator->first);
+                            if (focusedCallsign != NULL)
+                            {
+                                uint32_t status = focusedCallsign->Focused(false);
+                                std::cout << "result of set focus to false: " << status << std::endl;
+                                focusedCallsign->Release();
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                std::map<std::string, PluginData>::iterator focusedEntry = activePluginsData.find(client);
+                if (focusedEntry != activePluginsData.end())
+                {
+                    PluginData& pluginData = focusedEntry->second;
+                    std::cout << "setting the focus of " << client << " to true " << std::endl;
+                    Exchange::IFocus *focusedCallsign = mCurrentService->QueryInterfaceByCallsign<Exchange::IFocus>(client);
+                    if (focusedCallsign != NULL)
+                    {
+                        uint32_t status = focusedCallsign->Focused(true);
+                        focusedCallsign->Release();
+                        std::cout << "result of set focus to true: " << status << std::endl;
+                    }
+                }
+            }
             return ret;
         }
 
@@ -6250,10 +6387,10 @@ namespace WPEFramework {
             notify(RDKSHELL_EVENT_ON_DESTROYED, params);
         }
 
-        bool RDKShell::systemMemory(uint32_t &freeKb, uint32_t & totalKb, uint32_t & usedSwapKb)
+        bool RDKShell::systemMemory(uint32_t &freeKb, uint32_t & totalKb, uint32_t & availableKb, uint32_t & usedSwapKb)
         {
             lockRdkShellMutex();
-            bool ret = RdkShell::systemRam(freeKb, totalKb, usedSwapKb);
+            bool ret = RdkShell::systemRam(freeKb, totalKb, availableKb, usedSwapKb);
             gRdkShellMutex.unlock();
             return ret;
         }
@@ -6516,6 +6653,149 @@ namespace WPEFramework {
             return ret;
         }
 
+        uint32_t RDKShell::addEasterEggsWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            bool result = true;
+
+            if (!parameters.HasLabel("keySequence"))
+            {
+                result = false;
+                response["message"] = "please specify keySequence";
+            }
+            if (!parameters.HasLabel("id"))
+            {
+                result = false;
+                response["message"] = "please specify id";
+            }
+            if (!parameters.HasLabel("duration"))
+            {
+                result = false;
+                response["message"] = "please specify duration";
+            }
+            if (!parameters.HasLabel("api"))
+            {
+                result = false;
+                response["message"] = "please specify api";
+            }
+            if (!result)
+            {
+                returnResponse(result);
+            }
+
+            std::vector<RdkShellEasterEggKeyDetails> keyDetails;
+            const JsonArray keyInputs = parameters["keySequence"].Array();
+            for (int i=0; i<keyInputs.Length(); i++)
+            {
+                const JsonObject& keyInputInfo = keyInputs[i].Object();
+                uint32_t keyCode, flags=0;
+                std::string virtualKey("");
+                if (keyInputInfo.HasLabel("keyCode") && keyInputInfo.HasLabel("hold"))
+                {
+                    keyCode = keyInputInfo["keyCode"].Number();
+                    flags = keyInputInfo.HasLabel("modifiers") ? keyInputInfo["modifiers"].Number() : 0;
+                    const uint32_t holdTime = keyInputInfo["hold"].Number();
+                    keyDetails.push_back(RdkShellEasterEggKeyDetails(keyCode, flags, holdTime));
+                }
+                else
+                {
+                    continue;
+                }
+            }
+            std::string id = parameters["id"].String();
+            const uint32_t duration = parameters["duration"].Number();
+            JsonObject api = parameters["api"].Object();
+            std::string apiString("");
+            if (!api.ToString(apiString))
+            {
+                response["message"] = "api is not in proper json format";
+                returnResponse(false);
+            }
+            gRdkShellMutex.lock();
+            addEasterEgg(keyDetails, id, duration, apiString);
+            gRdkShellMutex.unlock();
+            keyDetails.clear();
+            returnResponse(result);
+        }
+
+        uint32_t RDKShell::removeEasterEggsWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            bool result = true;
+
+            if (!parameters.HasLabel("id"))
+            {
+                result = false;
+                response["message"] = "please specify id";
+            }
+            std::string id = parameters["id"].String();
+            gRdkShellMutex.lock();
+            removeEasterEgg(id);
+            gRdkShellMutex.unlock();
+            returnResponse(result);
+        }
+
+        uint32_t RDKShell::getEasterEggsWrapper(const JsonObject& parameters, JsonObject& response)
+        {
+            LOGINFOMETHOD();
+            bool result = true;
+            JsonArray easterEggs;
+            std::vector<RdkShellEasterEggDetails> easterEggsList;     
+            gRdkShellMutex.lock();
+            getEasterEggs(easterEggsList);
+            gRdkShellMutex.unlock();
+            for (size_t i=0; i<easterEggsList.size(); i++)
+	    {
+                RdkShellEasterEggDetails& easterEgg = easterEggsList[i];
+                JsonObject easterEggResponse;
+		easterEggResponse["id"] = easterEgg.id;
+                JsonArray keySequenceDetails;
+                for (size_t j=0; j<easterEgg.keySequence.size(); j++)
+                {
+                    JsonObject keyDetails;
+                    RdkShellEasterEggKeyDetails& details = easterEgg.keySequence[j];
+                    keyDetails["keyCode"] = details.keyCode;
+                    keyDetails["hold"] = details.keyHoldTime;
+                    keyDetails["modifiers"] = details.keyModifiers;
+                    keySequenceDetails.Add(keyDetails);
+                }
+		easterEggResponse["keySequence"] = keySequenceDetails;
+		easterEggResponse["duration"] = easterEgg.duration;
+		easterEggResponse["api"] = JsonObject(easterEgg.api.c_str());
+                easterEggs.Add(easterEggResponse);
+            }
+            response["easterEggs"] = easterEggs;
+            returnResponse(result);
+        }
+
+        bool RDKShell::enableInputEvents(const JsonArray& clients, bool enable)
+        {
+            bool result = true;
+
+            gRdkShellMutex.lock();
+            for (int i = 0; i < clients.Length(); i++)
+            {
+                const string& clientName = clients[i].String();
+                if (clientName == "*")
+                {
+                    std::vector<std::string> clientList;
+                   CompositorController::getClients(clientList);
+                    for (size_t i = 0; i < clientList.size(); i++)
+                    {
+                        result = result && CompositorController::enableInputEvents(clientList[i], enable);
+                    }
+
+                    break;
+                }
+                else
+                {
+                    result = result && CompositorController::enableInputEvents(clientName, enable);
+                }
+            }
+            gRdkShellMutex.unlock();
+
+            return result;
+        }
         // Internal methods end
     } // namespace Plugin
 } // namespace WPEFramework

@@ -22,6 +22,8 @@
 
 #include "TTSCommon.h"
 #include "TTSSpeaker.h"
+#include "TTSConfiguration.h"
+#include "TTSDownloader.h"
 
 #include <vector>
 
@@ -35,6 +37,8 @@ struct Configuration {
     std::string ttsEndPointSecured;
     std::string language;
     std::string voice;
+    std::string apiKey;
+    FallbackData data;
     double volume;
     uint8_t rate;
 };
@@ -66,6 +70,7 @@ public:
     // TTS Global APIs
     TTS_Error enableTTS(bool enable);
     bool isTTSEnabled();
+    void initiateDownload();
     TTS_Error listVoices(std::string language, std::vector<std::string> &voices);
     TTS_Error setConfiguration(Configuration &configuration);
     TTS_Error getConfiguration(Configuration &configuration);
@@ -96,6 +101,7 @@ private:
     TTSConfiguration m_defaultConfiguration;
     TTSEventCallback *m_callback;
     TTSSpeaker *m_speaker;
+    TTSDownloader *m_downloader;
 };
 
 } // namespace TTS

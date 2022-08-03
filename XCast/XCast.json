@@ -1,10 +1,13 @@
 {
-    "$schema": "https://raw.githubusercontent.com/rdkcentral/Thunder/master/Tools/JsonGenerator/schemas/interface.schema.json",
+    "$schema": "https://raw.githubusercontent.com/rdkcentral/rdkservices/main/Tools/json_generator/schemas/interface.schema.json",
     "jsonrpc": "2.0",
     "info": {
         "title": "XCast API", 
         "class": "XCast", 
         "description": "This XCast plugin provides methods and events to support launching applications from an external source (for example, DIAL, Alexa, or WebPA). The RT implementation should use a RT service name that complies to the convention `com.comcast.<name>cast`. For example, `com.comcast.xdialcast` is used by `xdialserver`."
+    },
+    "common": {
+        "$ref": "../common/common.json"
     },
     "definitions": {
         "enabled": {
@@ -38,25 +41,9 @@
             "example": "active"
         },
         "version": {
-            "summary": "DIAL protocol version string",
+            "summary": "DIAL protocol version",
             "type": "string",
-            "example": "2.1 or 2.2.1 etc."
-        },
-        "result": {
-            "type":"object",
-            "properties": {
-                "success": {
-                    "$ref": "#/definitions/success"
-                }
-            },
-            "required": [
-                "success"
-            ]
-        },
-        "success": {
-            "summary": "Whether the request succeeded",
-            "type": "boolean",
-            "example": "true"
+            "example": "2.1"
         }
     },
     "methods": {
@@ -71,7 +58,7 @@
                         "example": 1
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 }, 
                 "required": [
@@ -89,7 +76,7 @@
                         "$ref": "#/definitions/enabled"
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 }, 
                 "required": [
@@ -107,13 +94,31 @@
                         "$ref": "#/definitions/friendlyname"
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 }, 
                 "required": [
                     "friendlyname",
                     "success"
                 ]               
+            }
+        },
+        "getProtocolVersion":{
+            "summary": "Returns the DIAL protocol version supported by the server.\n  \n### Events \n\n No Events",
+            "result": {
+                "type":"object",
+                "properties": {
+                    "version": {
+                        "$ref": "#/definitions/version"
+                    },
+                    "success": {
+                        "$ref": "#/common/success"
+                    }
+                },
+                "required": [
+                    "version",
+                    "success"
+                ]
             }
         },
         "getStandbyBehavior":{
@@ -125,7 +130,7 @@
                         "$ref": "#/definitions/standbybehavior"
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 }, 
                 "required": [
@@ -133,25 +138,7 @@
                     "success"
                 ]               
             }
-        },
-        "getProtocolVersion":{
-            "summary": "Return the DIAL protocol version supported by the server .\n  \n### Events \n\n No Events",
-            "result": {
-                "type":"object",
-                "properties": {
-                    "version": {
-                        "$ref": "#/definitions/version"
-                    },
-                    "success": {
-                        "$ref": "#/definitions/success"
-                    }
-                },
-                "required": [
-                    "version",
-                    "success"
-                ]
-            }
-        },
+        },  
         "onApplicationStateChanged":{
             "summary": "Provides notification whenever an application changes state due to user activity, an internal error, or other reasons. For singleton applications, the `applicationId` parameter is optional. If an application request is denied, fails to fulfill, or the state change is triggered by an internal error, then a predefined error string should be included. This error may be translated to an XCast client.  \n\nThe following table provides a client error mapping example: \n\n| Error | Description | HTTP Status Codes |  \n| :-------- | :-------- | :-------- |   \n| `none` | The request (start/stop) is fulfilled successfully | HTTP 200 OK |  \n| `forbidden` | The user is not allowed to change the state of the application. This is not related to user account authentication of the native application | HTTP 403 Forbidden |  \n| `unavailable` | The target native application is not available on the device | HTTP 404 Not Found |  \n| `invalid` | The request is invalid (bad parameter for example) | HTTP 400 Bad Request |  \n| `internal` | The server failed to fulfill the request (server error) | HTTP 500 Internal |\n  \n### Events \n\n No Events",
             "params": {
@@ -180,7 +167,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         },
         "registerApplications": {
@@ -199,7 +186,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         },
         "setEnabled":{
@@ -216,7 +203,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         },
         "setFriendlyName":{
@@ -233,7 +220,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         },
         "setStandbyBehavior":{
@@ -250,7 +237,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         }
     },

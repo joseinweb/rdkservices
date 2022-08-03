@@ -111,7 +111,7 @@ This method takes no parameters.
 
 | Name | Type | Description |
 | :-------- | :-------- | :-------- |
-| result | null | Returns null on success. On failure, it returns the error message and error code from the following table |
+| result | null | Always null |
 
 ### Errors
 
@@ -157,7 +157,7 @@ LocationSync interface properties:
 
 
 <a name="location"></a>
-## *location [<sup>property</sup>](#Properties)*
+## *location*
 
 Provides access to the location information.
 

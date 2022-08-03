@@ -1,10 +1,13 @@
 {
-    "$schema": "https://raw.githubusercontent.com/rdkcentral/Thunder/master/Tools/JsonGenerator/schemas/interface.schema.json",
+    "$schema": "https://raw.githubusercontent.com/rdkcentral/rdkservices/main/Tools/json_generator/schemas/interface.schema.json",
     "jsonrpc": "2.0",
     "info": {
         "title": "HdmiCec API", 
         "class": "HdmiCec", 
         "description": "The `HdmiCec` plugin allows you to configure HDMI Consumer Electronics Control (CEC) on a set-top device. HdmiCec plugin can be used on an HDMI Source device where the application has complete control on implementing the CEC messages, and Thunder plugin provides the transport mechanism to send and receive the messages to other CEC devices in the network."
+    },
+    "common": {
+        "$ref": "../common/common.json"
     },
     "definitions": {
         "enabled": {
@@ -40,24 +43,30 @@
             "type":"string",
             "example": "00f0"
         },
-        "result": {
-            "type":"object",
-            "properties": {
-                "success": {
-                    "$ref": "#/definitions/success"
-                }
-            },
-            "required": [
-                "success"
-            ]
-        },
-        "success": {
-            "summary": "Whether the request succeeded",
+        "status": {
+            "summary": "`true` if device is active source, otherwise `false`",
             "type": "boolean",
             "example": "true"
-        }
+         }
     },
     "methods": {
+        "getActiveSourceStatus":{
+            "summary": "Gets the active source status of the device.\n  \n### Event \n\n No Events",
+            "params": {
+                "type":"object",
+                "properties": {
+                    "status": {
+                       "$ref": "#/definitions/status"
+                    }
+                },
+                "required": [
+                    "status"
+                ]
+            },
+            "result": {
+                "$ref": "#/common/result"
+            }
+        },
         "getCECAddresses":{
             "summary": "Returns the HDMI-CEC addresses that are assigned to the local device.\n  \n### Event \n\n No Events",
             "result": {
@@ -88,7 +97,7 @@
                         ]
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 },
                 "required": [
@@ -131,7 +140,7 @@
                         }
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 },
                 "required": [
@@ -150,7 +159,7 @@
                         "$ref": "#/definitions/enabled"
                     },
                     "success": {
-                        "$ref": "#/definitions/success"
+                        "$ref": "#/common/success"
                     }
                 },
                 "required": [
@@ -176,7 +185,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         },
         "setEnabled":{
@@ -193,26 +202,7 @@
                 ]
             },
             "result": {
-                "$ref": "#/definitions/result"
-            }
-        },
-        "getActiveSourceStatus":{
-            "summary": "Get the active source status of the device.\n  \n### Event \n\n No Events",
-            "params": {
-                "type":"object",
-                "properties": {
-                    "status": {
-                       "summary": "status true means device is active source and false means device is not active source",
-                       "type": "boolean",
-                       "example": "true"
-                    }
-                },
-                "required": [
-                    "status"
-                ]
-            },
-            "result": {
-                "$ref": "#/definitions/result"
+                "$ref": "#/common/result"
             }
         }
     },
@@ -237,29 +227,13 @@
                 ]
             }
         },
-        "onMessage":{
-            "summary": "Triggered when a message is sent from an HDMI device",
-            "params": {
-                "type":"object",
-                "properties": {
-                    "message": {
-                        "$ref": "#/definitions/message"
-                    }
-                },
-                "required": [
-                    "message"
-                ]
-            }
-        },
         "onActiveSourceStatusUpdated":{
-            "summary": "Triggered when device active source status changes ",
+            "summary": "Triggered when device active source status changes",
             "params": {
                 "type":"object",
                 "properties": {
                     "status": {
-                       "summary": "status true means device is active source and false means device is not active source",
-                       "type": "boolean",
-                       "example": "true"
+                        "$ref": "#/definitions/status"  
                     }
                 },
                 "required": [
@@ -306,6 +280,20 @@
                 },
                 "required": [
                     "logicalAddress"
+                ]
+            }
+        },
+        "onMessage":{
+            "summary": "Triggered when a message is sent from an HDMI device",
+            "params": {
+                "type":"object",
+                "properties": {
+                    "message": {
+                        "$ref": "#/definitions/message"
+                    }
+                },
+                "required": [
+                    "message"
                 ]
             }
         }
