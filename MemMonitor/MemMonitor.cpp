@@ -9,7 +9,7 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.38"
+#define MY_VERSION "1.38b"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 #define LAUNCH_URL "http://127.0.0.1:50050/lxresui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
@@ -36,12 +36,14 @@ namespace WPEFramework
             string message, clients;
             if (parameters.HasLabel("keycode"))
             {
-                if (!parameters["keyDown"].Boolean() && parameters["keycode"].Number() == 36)
+                if (!parameters["keyDown"].Boolean() && parameters["keycode"].Number() == HOME_KEY)
                 {
-                    // Is there an active app ?
-                    if (!activeCallsign.empty())
+                    // Is there an active app  and not residentapp?
+                    bool isResActiveApp = Utils::String::stringContains(activeCallsign, "residentapp");
+                    if (!activeCallsign.empty() && !isResActiveApp)
                     {
                         // destroy active app.
+                        LOGINFO(" Active app is not resident app. Removing %s...  ", C_STR(activeCallsign));
                         PluginHost::WorkerPool::Instance().Submit(Job::Create(this, REMOVE_ACTIVE_APP));
                     }
                     else

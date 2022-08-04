@@ -23,7 +23,7 @@
 #include "utils.h"
 #include "AbstractPlugin.h"
 #include "tptimer.h"
-
+#define HOME_KEY 36
 namespace WPEFramework
 {
     namespace Plugin
