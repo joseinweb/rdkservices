@@ -32,15 +32,35 @@ namespace WPEFramework
         {
             LAUNCH,
             OFFLOAD,
-            REMOVE_ACTIVE_APP
+            REMOVE_ACTIVE_APP,
+            RESTORE_RES_APP
         };
 
         class MemMonitor : public AbstractPlugin
         {
+            class Config: public Core::JSON::Container {
+                private:
+                Config(const Config&) = delete;
+                Config& operator=(const Config&) = delete;
+
+                public:
+                Config() : Core::JSON::Container(),Homeurl(),Callsigns()
+                {
+                    Add(_T("homeurl"),&Homeurl);
+                    Add(_T("callsigns"), &Callsigns);
+                }
+                ~Config()
+                {
+
+                }
+                Core::JSON::String Homeurl;
+                Core::JSON::ArrayType<Core::JSON::String> Callsigns;
+            }configurations;
 
             class EXTERNAL Job : public Core::IDispatch
             {
             public:
+
                 Job(MemMonitor *monitor, JOBTYPE _jobType)
                     : _monitor(monitor), jobType(_jobType)
                 {
@@ -76,12 +96,19 @@ namespace WPEFramework
 
             void Dispatch(JOBTYPE keycode);
 
+            //Event handling...
             void SubscribeToEvents();
             void onLowMemoryEvent(const JsonObject &parameters);
             void onSuspended(const JsonObject &parameters);
             void onDestroyed(const JsonObject &parameters);
             void onLaunched(const JsonObject &parameters);
             void onKeyEvent(const JsonObject &parameters);
+
+            //Give some breathing space for apps
+            void setMemoryLimits();
+
+            void offloadApplication(const string callsign);
+            void updateState(bool running, bool started);
             
             bool m_subscribedToEvents;
             void onTimer();
@@ -90,9 +117,11 @@ namespace WPEFramework
             TpTimer m_timer;
             mutable Core::CriticalSection m_callMutex;
             WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement> *m_remoteObject;
-            volatile bool m_isResAppRunning, m_launchInitiated;
+            volatile bool m_isResAppRunning, m_launchInitiated, m_onHomeScreen;
+
             string activeCallsign;
             string homeURL;
+            std::list <string> callsigns;
 
         public:
             MemMonitor();

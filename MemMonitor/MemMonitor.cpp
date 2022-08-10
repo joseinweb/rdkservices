@@ -9,9 +9,9 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define MY_VERSION "1.38b"
+#define REVISION "1.40f"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
-#define LAUNCH_URL "http://127.0.0.1:50050/lxresui/index.html#menu"
+#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
 
 namespace WPEFramework
@@ -26,7 +26,7 @@ namespace WPEFramework
             parameters.ToString(message);
             LOGINFO(" [Low memory  event], %s : %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
 
-            if (parameters.HasLabel("ram"))
+            if (parameters.HasLabel("ram") && m_isResAppRunning)
             {
                 PluginHost::WorkerPool::Instance().Submit(Job::Create(this, OFFLOAD));
             }
@@ -38,27 +38,27 @@ namespace WPEFramework
             {
                 if (!parameters["keyDown"].Boolean() && parameters["keycode"].Number() == HOME_KEY)
                 {
-                    // Is there an active app  and not residentapp?
+                    // Case 1. Is there an active app and not is not residentapp
                     bool isResActiveApp = Utils::String::stringContains(activeCallsign, "residentapp");
                     if (!activeCallsign.empty() && !isResActiveApp)
-                    {
-                        // destroy active app.
-                        LOGINFO(" Active app is not resident app. Removing %s...  ", C_STR(activeCallsign));
-                        PluginHost::WorkerPool::Instance().Submit(Job::Create(this, REMOVE_ACTIVE_APP));
-                    }
-                    else
                     {
                         if (!m_isResAppRunning && !m_launchInitiated)
                         {
                             LOGINFO(" Hot key ... Launching resident app ");
-                            PluginHost::WorkerPool::Instance().Submit(Job::Create(this, LAUNCH));
-                        }
-                        else
-                        {
-                            LOGINFO(" Hot key ... Resident app status launched: %d, islaunching : %d",
-                                    m_isResAppRunning, m_launchInitiated);
+                            PluginHost::WorkerPool::Instance().Submit(Job::Create(this, RESTORE_RES_APP));
+                            activeCallsign = "ResidentApp";
                         }
                     }
+                    else
+                        LOGINFO(" [onKeyEvent] Case 1 is not applicable");
+                    // Case 2. There is no active app and resident app is not launched.
+                    if (activeCallsign.empty())
+                    {
+                        PluginHost::WorkerPool::Instance().Submit(Job::Create(this, LAUNCH));
+                        activeCallsign = "ResidentApp";
+                    }
+                    else
+                        LOGINFO(" [onKeyEvent] Case 2 is not applicable");
                 }
             }
         }
@@ -70,13 +70,15 @@ namespace WPEFramework
                 LOGINFO(" Launch notification  ...%s  ", C_STR(activeCallsign));
 
                 if (Utils::String::stringContains(activeCallsign, "residentapp"))
-                {
-                    m_callMutex.Lock();
-                    m_isResAppRunning = true;
-                    m_launchInitiated = false;
-                    m_callMutex.Unlock();
-                }
+                    updateState(true,false);
             }
+        }
+        void MemMonitor::updateState(bool running, bool started)
+        {
+                    m_callMutex.Lock();
+                    m_isResAppRunning = running;
+                    m_launchInitiated = started;
+                    m_callMutex.Unlock();
         }
         void MemMonitor::onDestroyed(const JsonObject &parameters)
         {
@@ -92,10 +94,8 @@ namespace WPEFramework
                 }
                 else if (Utils::String::stringContains(destroyedApp, "residentapp"))
                 {
-                    m_callMutex.Lock();
-                    m_isResAppRunning = false;
-                    m_launchInitiated = false;
-                    m_callMutex.Unlock();
+                    updateState(false,false);
+                    m_onHomeScreen = false;
                 }
             }
         }
@@ -108,17 +108,32 @@ namespace WPEFramework
 
             switch (jobType)
             {
+            case RESTORE_RES_APP:
+            {
+                string currApp = activeCallsign;
+                LOGINFO(" [Dispatch] Restoring ResidentApp..");
+                m_onHomeScreen = true;
+                launchResidentApp();
+                LOGINFO(" [Dispatch] Offloading active app...");
+                offloadApplication(currApp);
+            }
+            break;
+            case REMOVE_ACTIVE_APP:
+                LOGINFO(" [Dispatch] Removing active app");
+                offloadApplication(activeCallsign);
+                break;
             case LAUNCH:
                 launchResidentApp();
                 break;
             case OFFLOAD:
-                req["callsign"] = "ResidentApp";
-                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
-                LOGINFO("destroyed residentApp, status : %d", (Core::ERROR_NONE == status));
-                break;
-            case REMOVE_ACTIVE_APP:
-                req["callsign"] = activeCallsign.c_str();
-                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
+                if (!m_onHomeScreen)
+                {
+                    offloadApplication("ResidentApp");
+                }
+                else
+                {
+                    LOGINFO("Skpping residentUI offloading. :");
+                }
                 break;
             }
         }
@@ -149,7 +164,8 @@ namespace WPEFramework
                                    m_subscribedToEvents(false),
                                    m_remoteObject(nullptr),
                                    m_isResAppRunning(false),
-                                   m_launchInitiated(false)
+                                   m_launchInitiated(false),
+                                   m_onHomeScreen(false)
         {
             LOGINFO();
             m_timer.connect(std::bind(&MemMonitor::onTimer, this));
@@ -157,25 +173,54 @@ namespace WPEFramework
         MemMonitor::~MemMonitor()
         {
         }
-        const string MemMonitor::Initialize(PluginHost::IShell * service )
+
+        void MemMonitor::offloadApplication(const string callsign)
+        {
+            JsonObject req, res;
+            uint32_t status;
+
+            req["callsign"] = callsign.c_str();
+            status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
+            LOGINFO("Offloading  %s  result : %s", C_STR(callsign), (Core::ERROR_NONE == status) ? "Success" : "Failure");
+        }
+        const string MemMonitor::Initialize(PluginHost::IShell *service)
         {
             LOGINFO();
 
-            LOGINFO(" version %s ", MY_VERSION);
+            LOGINFO(" Revision %s ", REVISION);
             m_timer.start(RECONNECTION_TIME_IN_MILLISECONDS);
             Core::SystemInfo::SetEnvironment(_T("THUNDER_ACCESS"), _T(SERVER_DETAILS));
             m_remoteObject = new WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>(_T(SUBSCRIPTION_CALLSIGN_VER));
 
-             std::string configLine = service->ConfigLine();
-             if (!configLine.empty())
-             {
-                JsonObject serviceConfig = JsonObject(configLine.c_str());
-                if (serviceConfig.HasLabel("homeurl"))
-                    homeURL = serviceConfig["homeurl"].String();
-                else
-                    homeURL = LAUNCH_URL;
-             }
-             LOGINFO("Home URL is set to [%s] .",C_STR(homeURL));
+            configurations.FromString(service->ConfigLine());
+
+            if (configurations.Homeurl.IsSet())
+            {
+                homeURL = configurations.Homeurl.Value();
+            }
+            else
+            {
+                LOGINFO("Home URL is not found in config");
+                homeURL = LAUNCH_URL;
+            }
+
+            LOGINFO("Home URL is set to [%s] .", C_STR(homeURL));
+
+            if (configurations.Callsigns.IsSet() && configurations.Callsigns.Length() > 1)
+            {
+                Core::JSON::ArrayType<Core::JSON::String>::Iterator index(configurations.Callsigns.Elements());
+                while (index.Next())
+                {
+                    callsigns.push_back(index.Current().Value());
+                }
+                LOGINFO("Total callsign length is %d", configurations.Callsigns.Length());
+            }
+            else
+            {
+                LOGINFO("Callsigns is not found in configuration. Adding cobalt to the list.");
+                callsigns.push_back("Cobalt");
+            }
+
             return "";
         }
 
@@ -211,6 +256,7 @@ namespace WPEFramework
             }
             if (m_subscribedToEvents)
             {
+                setMemoryLimits();
                 if (m_timer.isActive())
                 {
                     m_timer.stop();
@@ -254,5 +300,20 @@ namespace WPEFramework
                 LOGINFO(" RDKShell is not yet active. Wait for it.. ");
             }
         }
+        void MemMonitor::setMemoryLimits()
+        {
+            JsonObject req, res;
+            uint32_t status = Core::ERROR_NONE;
+
+            req["enable"] = true;
+            req["lowRam"] = 150;
+            req["criticallyLowRam"] = 75;
+            status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "setMemoryMonitor", req, res);
+            if (Core::ERROR_NONE == status)
+            {
+                LOGINFO(" Memory limits are set at 150 MB and 75M respectively.. ");
+            }
+        }
     }
+
 }

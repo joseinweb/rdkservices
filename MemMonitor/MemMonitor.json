@@ -4,7 +4,12 @@
  "callsign":"org.rdk.MemMonitor",
  "autostart":false,
  "startuporder":30,
-   "configuration":{
-	"homeurl":"http://127.0.0.1:50050/lxresui/index.html"
+  "configuration":{
+	"homeurl":"http://127.0.0.1:50050/lxresui/index.html",
+	"callsigns":[
+		"Amazon",
+		"Cobalt",
+		"Netflix"
+	]
   }
 }
