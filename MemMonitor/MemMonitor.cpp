@@ -9,7 +9,7 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define REVISION "1.40f"
+#define REVISION "1.41"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 #define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
@@ -24,7 +24,7 @@ namespace WPEFramework
         {
             string message;
             parameters.ToString(message);
-            LOGINFO(" [Low memory  event], %s : %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
+            LOGINFO(" [ %s]: %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
 
             if (parameters.HasLabel("ram") && m_isResAppRunning)
             {
@@ -46,11 +46,10 @@ namespace WPEFramework
                         {
                             LOGINFO(" Hot key ... Launching resident app ");
                             PluginHost::WorkerPool::Instance().Submit(Job::Create(this, RESTORE_RES_APP));
-                            activeCallsign = "ResidentApp";
                         }
                     }
                     else
-                        LOGINFO(" [onKeyEvent] Case 1 is not applicable");
+                        LOGINFO(" [onKeyEvent] Case 1 is not applicable. Active app is  [%s] ", C_STR(activeCallsign));
                     // Case 2. There is no active app and resident app is not launched.
                     if (activeCallsign.empty())
                     {
@@ -70,15 +69,15 @@ namespace WPEFramework
                 LOGINFO(" Launch notification  ...%s  ", C_STR(activeCallsign));
 
                 if (Utils::String::stringContains(activeCallsign, "residentapp"))
-                    updateState(true,false);
+                    updateState(true, false);
             }
         }
         void MemMonitor::updateState(bool running, bool started)
         {
-                    m_callMutex.Lock();
-                    m_isResAppRunning = running;
-                    m_launchInitiated = started;
-                    m_callMutex.Unlock();
+            m_callMutex.Lock();
+            m_isResAppRunning = running;
+            m_launchInitiated = started;
+            m_callMutex.Unlock();
         }
         void MemMonitor::onDestroyed(const JsonObject &parameters)
         {
@@ -94,7 +93,7 @@ namespace WPEFramework
                 }
                 else if (Utils::String::stringContains(destroyedApp, "residentapp"))
                 {
-                    updateState(false,false);
+                    updateState(false, false);
                     m_onHomeScreen = false;
                 }
             }
@@ -106,6 +105,8 @@ namespace WPEFramework
             JsonObject req, res;
             uint32_t status;
 
+            LOGINFO(" [Dispatch] Currently active [%s]", C_STR(activeCallsign));
+
             switch (jobType)
             {
             case RESTORE_RES_APP:
@@ -114,25 +115,26 @@ namespace WPEFramework
                 LOGINFO(" [Dispatch] Restoring ResidentApp..");
                 m_onHomeScreen = true;
                 launchResidentApp();
-                LOGINFO(" [Dispatch] Offloading active app...");
+                LOGINFO(" [Dispatch] Offloading active app... ");
                 offloadApplication(currApp);
             }
             break;
             case REMOVE_ACTIVE_APP:
-                LOGINFO(" [Dispatch] Removing active app");
+                LOGINFO(" [Dispatch] Removing active app ");
                 offloadApplication(activeCallsign);
                 break;
             case LAUNCH:
                 launchResidentApp();
                 break;
             case OFFLOAD:
-                if (!m_onHomeScreen)
+                if (m_onHomeScreen)
                 {
                     offloadApplication("ResidentApp");
+                    m_onHomeScreen = false;
                 }
                 else
                 {
-                    LOGINFO("Skpping residentUI offloading. :");
+                    LOGINFO("Skipping residentUI offloading. : current active app is %s", C_STR(activeCallsign));
                 }
                 break;
             }
@@ -151,9 +153,7 @@ namespace WPEFramework
 
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
             res.ToString(message);
-            m_callMutex.Lock();
-            m_launchInitiated = true;
-            m_callMutex.Unlock();
+            updateState(true, true);
             LOGINFO(" Launched residentapp . status : %d,  msg %s ",
                     (status == Core::ERROR_NONE), C_STR(message));
         }
@@ -288,7 +288,7 @@ namespace WPEFramework
                 if (Core::ERROR_NONE == status)
                 {
                     string clients = res["clients"].String();
-                    m_isResAppRunning = (clients.find("residentapp") != std::string::npos);
+                    m_onHomeScreen = m_isResAppRunning = (clients.find("residentapp") != std::string::npos);
                 }
                 else
                 {

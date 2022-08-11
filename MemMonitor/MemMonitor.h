@@ -38,29 +38,28 @@ namespace WPEFramework
 
         class MemMonitor : public AbstractPlugin
         {
-            class Config: public Core::JSON::Container {
-                private:
-                Config(const Config&) = delete;
-                Config& operator=(const Config&) = delete;
+            class Config : public Core::JSON::Container
+            {
+            private:
+                Config(const Config &) = delete;
+                Config &operator=(const Config &) = delete;
 
-                public:
-                Config() : Core::JSON::Container(),Homeurl(),Callsigns()
+            public:
+                Config() : Core::JSON::Container(), Homeurl(), Callsigns()
                 {
-                    Add(_T("homeurl"),&Homeurl);
+                    Add(_T("homeurl"), &Homeurl);
                     Add(_T("callsigns"), &Callsigns);
                 }
                 ~Config()
                 {
-
                 }
                 Core::JSON::String Homeurl;
                 Core::JSON::ArrayType<Core::JSON::String> Callsigns;
-            }configurations;
+            } configurations;
 
             class EXTERNAL Job : public Core::IDispatch
             {
             public:
-
                 Job(MemMonitor *monitor, JOBTYPE _jobType)
                     : _monitor(monitor), jobType(_jobType)
                 {
@@ -96,7 +95,7 @@ namespace WPEFramework
 
             void Dispatch(JOBTYPE keycode);
 
-            //Event handling...
+            // Event handling...
             void SubscribeToEvents();
             void onLowMemoryEvent(const JsonObject &parameters);
             void onSuspended(const JsonObject &parameters);
@@ -104,12 +103,12 @@ namespace WPEFramework
             void onLaunched(const JsonObject &parameters);
             void onKeyEvent(const JsonObject &parameters);
 
-            //Give some breathing space for apps
+            // Give some breathing space for apps
             void setMemoryLimits();
 
             void offloadApplication(const string callsign);
             void updateState(bool running, bool started);
-            
+
             bool m_subscribedToEvents;
             void onTimer();
             void launchResidentApp();
@@ -121,7 +120,7 @@ namespace WPEFramework
 
             string activeCallsign;
             string homeURL;
-            std::list <string> callsigns;
+            std::list<string> callsigns;
 
         public:
             MemMonitor();
