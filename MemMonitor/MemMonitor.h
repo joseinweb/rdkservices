@@ -32,6 +32,7 @@ namespace WPEFramework
         {
             LAUNCH,
             OFFLOAD,
+            KEEP_ACTIVE_APP,
             REMOVE_ACTIVE_APP,
             RESTORE_RES_APP
         };
@@ -98,6 +99,7 @@ namespace WPEFramework
             // Event handling...
             void SubscribeToEvents();
             void onLowMemoryEvent(const JsonObject &parameters);
+            void onCriticalMemoryEvent(const JsonObject &parameters);
             void onSuspended(const JsonObject &parameters);
             void onDestroyed(const JsonObject &parameters);
             void onLaunched(const JsonObject &parameters);

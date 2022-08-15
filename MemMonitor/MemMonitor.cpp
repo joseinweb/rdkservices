@@ -4,12 +4,13 @@
 #define SUBSCRIPTION_CALLSIGN "org.rdk.RDKShell"
 #define SUBSCRIPTION_CALLSIGN_VER SUBSCRIPTION_CALLSIGN ".1"
 
-#define SUBSCRIPTION_LOW_MEMORY_EVENT "onDeviceCriticallyLowRamWarning"
+#define SUBSCRIPTION_LOW_MEMORY_EVENT "onDeviceLowRamWarning"
+#define SUBSCRIPTION_CRITICAL_MEMORY_EVENT "onDeviceCriticallyLowRamWarning"
 #define SUBSCRIPTION_ONKEY_EVENT "onKeyEvent"
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define REVISION "1.41"
+#define REVISION "1.42b"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 #define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
@@ -20,7 +21,7 @@ namespace WPEFramework
     {
         static std::string gThunderAccessValue = SERVER_DETAILS;
         static std::string sThunderSecurityToken;
-        void MemMonitor::onLowMemoryEvent(const JsonObject &parameters)
+        void MemMonitor::onCriticalMemoryEvent(const JsonObject &parameters)
         {
             string message;
             parameters.ToString(message);
@@ -31,6 +32,15 @@ namespace WPEFramework
                 PluginHost::WorkerPool::Instance().Submit(Job::Create(this, OFFLOAD));
             }
         }
+        void MemMonitor::onLowMemoryEvent(const JsonObject &parameters)
+        {
+            string message;
+            parameters.ToString(message);
+            LOGINFO(" [ %s]: %s Res app running ? %d ", __FUNCTION__, C_STR(message), m_isResAppRunning);
+            // Let us offload all unused applications.
+            PluginHost::WorkerPool::Instance().Submit(Job::Create(this, KEEP_ACTIVE_APP));
+        }
+
         void MemMonitor::onKeyEvent(const JsonObject &parameters)
         {
             string message, clients;
@@ -137,6 +147,27 @@ namespace WPEFramework
                     LOGINFO("Skipping residentUI offloading. : current active app is %s", C_STR(activeCallsign));
                 }
                 break;
+            case KEEP_ACTIVE_APP:
+            {
+                JsonObject req, res;
+                string clients;
+                status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "getClients", req, res);
+                if (Core::ERROR_NONE == status)
+                    clients = res["clients"].String();
+
+                // offlaod the apps from the excluison list
+                for (string app : callsigns)
+                {
+                    LOGINFO(" [ %s]: Checking %s against %s", __FUNCTION__, C_STR(app), C_STR(activeCallsign));
+                    if (!Utils::String::stringContains(activeCallsign, app) &&
+                        Utils::String::stringContains(clients, app))
+
+                    {
+                        LOGINFO("Removing application %s", C_STR(app));
+                        offloadApplication(app);
+                    }
+                }
+            }
             }
         }
         void MemMonitor::launchResidentApp()
@@ -231,6 +262,7 @@ namespace WPEFramework
             if (m_subscribedToEvents)
             {
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT));
+                m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_CRITICAL_MEMORY_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT));
                 m_remoteObject->Unsubscribe(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT));
@@ -277,6 +309,7 @@ namespace WPEFramework
                 std::string serviceCallsign = "org.rdk.RDKShell.1";
 
                 m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT), &MemMonitor::onLowMemoryEvent, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_CRITICAL_MEMORY_EVENT), &MemMonitor::onCriticalMemoryEvent, this);
                 m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT), &MemMonitor::onKeyEvent, this);
                 m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT), &MemMonitor::onLaunched, this);
                 m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &MemMonitor::onDestroyed, this);
@@ -306,12 +339,12 @@ namespace WPEFramework
             uint32_t status = Core::ERROR_NONE;
 
             req["enable"] = true;
-            req["lowRam"] = 150;
-            req["criticallyLowRam"] = 75;
+            req["lowRam"] = 100;
+            req["criticallyLowRam"] = 50;
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "setMemoryMonitor", req, res);
             if (Core::ERROR_NONE == status)
             {
-                LOGINFO(" Memory limits are set at 150 MB and 75M respectively.. ");
+                LOGINFO(" Memory limits are set at 100MB and 50M respectively.. ");
             }
         }
     }
