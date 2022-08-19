@@ -50,11 +50,15 @@ namespace WPEFramework
                 {
                     Add(_T("homeurl"), &Homeurl);
                     Add(_T("callsigns"), &Callsigns);
+                    Add(_T("lowmem"), &Lowmem);
+                    Add(_T("criticalmem"),&Criticalmem);
                 }
                 ~Config()
                 {
                 }
                 Core::JSON::String Homeurl;
+                Core::JSON::DecUInt16 Lowmem, Criticalmem;
+
                 Core::JSON::ArrayType<Core::JSON::String> Callsigns;
             } configurations;
 
@@ -121,7 +125,8 @@ namespace WPEFramework
             volatile bool m_isResAppRunning, m_launchInitiated, m_onHomeScreen;
 
             string activeCallsign;
-            string homeURL;
+            string m_homeURL;
+            int m_lowMem, m_criticalMem;
             std::list<string> callsigns;
 
         public:

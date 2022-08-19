@@ -10,7 +10,7 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define REVISION "1.42b"
+#define REVISION "1.42e"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 #define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
@@ -180,7 +180,7 @@ namespace WPEFramework
             req["type"] = "ResidentApp";
             req["visible"] = true;
             req["focus"] = true;
-            req["uri"] = homeURL;
+            req["uri"] = m_homeURL;
 
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("launch"), req, res);
             res.ToString(message);
@@ -196,7 +196,9 @@ namespace WPEFramework
                                    m_remoteObject(nullptr),
                                    m_isResAppRunning(false),
                                    m_launchInitiated(false),
-                                   m_onHomeScreen(false)
+                                   m_onHomeScreen(false),
+                                   m_lowMem(100),
+                                   m_criticalMem(50)
         {
             LOGINFO();
             m_timer.connect(std::bind(&MemMonitor::onTimer, this));
@@ -224,18 +226,17 @@ namespace WPEFramework
             m_remoteObject = new WPEFramework::JSONRPC::LinkType<WPEFramework::Core::JSON::IElement>(_T(SUBSCRIPTION_CALLSIGN_VER));
 
             configurations.FromString(service->ConfigLine());
+            LOGINFO("Home URL is set ?[%d] , Low memory limit set ? [%d] , Critical memory limit set ? [%d]",
+                    configurations.Homeurl.IsSet(),
+                    configurations.Lowmem.IsSet(), configurations.Criticalmem.IsSet());
 
-            if (configurations.Homeurl.IsSet())
-            {
-                homeURL = configurations.Homeurl.Value();
-            }
-            else
-            {
-                LOGINFO("Home URL is not found in config");
-                homeURL = LAUNCH_URL;
-            }
+            m_homeURL = configurations.Homeurl.IsSet() ? configurations.Homeurl.Value() : m_homeURL;
 
-            LOGINFO("Home URL is set to [%s] .", C_STR(homeURL));
+            m_lowMem = configurations.Lowmem.IsSet() ? configurations.Lowmem.Value() : m_lowMem;
+
+            m_criticalMem = configurations.Criticalmem.IsSet() ? configurations.Criticalmem.Value() : m_criticalMem;
+
+            LOGINFO("Home URL is set to [%s] .", C_STR(m_homeURL));
 
             if (configurations.Callsigns.IsSet() && configurations.Callsigns.Length() > 1)
             {
@@ -339,12 +340,12 @@ namespace WPEFramework
             uint32_t status = Core::ERROR_NONE;
 
             req["enable"] = true;
-            req["lowRam"] = 100;
-            req["criticallyLowRam"] = 50;
+            req["lowRam"] = m_lowMem;
+            req["criticallyLowRam"] = m_criticalMem;
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, "setMemoryMonitor", req, res);
             if (Core::ERROR_NONE == status)
             {
-                LOGINFO(" Memory limits are set at 100MB and 50M respectively.. ");
+                LOGINFO(" Memory limits are set at %dM and %dM respectively.. ", m_lowMem, m_criticalMem);
             }
         }
     }
