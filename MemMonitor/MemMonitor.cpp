@@ -10,9 +10,8 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define REVISION "1.42e"
+#define REVISION "1.42f"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
-#define LAUNCH_URL "https://apps.rdkcentral.com/rdk-apps/accelerator-home-ui/index.html#menu"
 #define THUNDER_TIMEOUT 2000
 
 namespace WPEFramework

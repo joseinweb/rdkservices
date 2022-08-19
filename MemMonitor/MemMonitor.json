@@ -1,17 +1,5 @@
 {
  "locator":"libWPEFrameworkMemMonitor.so",
  "classname":"MemMonitor",
- "callsign":"org.rdk.MemMonitor",
- "autostart":false,
- "startuporder":30,
-  "configuration":{
-	"homeurl":"http://127.0.0.1:50050/lxresui/index.html",
-	"lowmem":110,
-	"criticalmem":30,
-	"callsigns":[
-		"Amazon",
-		"Cobalt",
-		"Netflix"
-	]
-  }
+ "callsign":"org.rdk.MemMonitor"
 }
