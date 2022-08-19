@@ -12,5 +12,7 @@ The following values can be configured at runtime.
 | criticalmem | Limit set for Critical memory event trigger in MB. |
 | callsigns | An array of plugins/applications that can be offloaded. |
 
+## Things to do #
+
 The following are planned in the next phase.
 * Automatic loading of offloaded application back when memory is available.
