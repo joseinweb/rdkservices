@@ -18,8 +18,11 @@
 set(PLUGIN_NAME MemMonitor)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-set(PLUGIN_MEMMONITOR_AUTOSTART "true" CACHE STRING "Automatically start Memory Monitor plugin")
+set(PLUGIN_MEMMONITOR_AUTOSTART "false" CACHE STRING "Automatically start Memory Monitor plugin")
 set(PLUGIN_MEMMONITOR_MODE "Off" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
+set(PLUGIN_MEMMONITOR_HOMEURL "${PLUGIN_MEMMONITOR_HOMEURL}" CACHE STRING  "Default URL for ResidentApp")
+set(PLUGIN_MEMMONITOR_LOW_MEM_LIMIT "${PLUGIN_MEMMONITOR_LOW_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger low memory events")
+set(PLUGIN_MEMMONITOR_CRITICAL_MEM_LIMIT "${PLUGIN_MEMMONITOR_CRITICAL_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger critical memory events")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
