@@ -23,7 +23,6 @@ namespace Plugin {
         constexpr auto* kRfcPartnerId = _T("Device.DeviceInfo.X_RDKCENTRAL-COM_Syndication.PartnerId");
         constexpr auto* kRfcModelName = _T("Device.DeviceInfo.ModelName");
         constexpr auto* kRfcSerialNumber = _T("Device.DeviceInfo.SerialNumber");
-        constexpr auto* kDefaultAudioPort = _T("HDMI0");
     }
 
     SERVICE_REGISTRATION(DeviceCapabilities, 1, 0);
@@ -267,9 +266,9 @@ namespace Plugin {
     {
         uint32_t result = Core::ERROR_NONE;
 
-        vector<uint8_t> edidVec({ 'u', 'n', 'k', 'n', 'o', 'w', 'n' });
+        std::vector<uint8_t> edidVec({ 'u', 'n', 'k', 'n', 'o', 'w', 'n' });
         try {
-            vector<unsigned char> edidVec2;
+            std::vector<unsigned char> edidVec2;
             device::Host::getInstance().getHostEDID(edidVec2);
             edidVec = edidVec2;
         } catch (const device::Exception& e) {
@@ -285,8 +284,8 @@ namespace Plugin {
         if (result == Core::ERROR_NONE) {
             // convert to base64
 
-            uint16_t size = min(edidVec.size(), (size_t)numeric_limits<uint16_t>::max());
-            if (edidVec.size() > (size_t)numeric_limits<uint16_t>::max()) {
+            uint16_t size = std::min(edidVec.size(), (size_t)std::numeric_limits<uint16_t>::max());
+            if (edidVec.size() > (size_t)std::numeric_limits<uint16_t>::max()) {
                 result = Core::ERROR_GENERAL;
             } else {
                 string base64String;
@@ -388,7 +387,7 @@ namespace Plugin {
         int capabilities = dsAUDIOSUPPORT_NONE;
 
         try {
-            auto strAudioPort = audioPort.empty() ? string(kDefaultAudioPort) : audioPort;
+            auto strAudioPort = audioPort.empty() ? device::Host::getInstance().getDefaultAudioPortName() : audioPort;
             auto& aPort = device::Host::getInstance().getAudioOutputPort(strAudioPort);
             aPort.getAudioCapabilities(&capabilities);
         } catch (const device::Exception& e) {
@@ -432,7 +431,7 @@ namespace Plugin {
         int capabilities = dsMS12SUPPORT_NONE;
 
         try {
-            auto strAudioPort = audioPort.empty() ? string(kDefaultAudioPort) : audioPort;
+            auto strAudioPort = audioPort.empty() ? device::Host::getInstance().getDefaultAudioPortName() : audioPort;
             auto& aPort = device::Host::getInstance().getAudioOutputPort(strAudioPort);
             aPort.getMS12Capabilities(&capabilities);
         } catch (const device::Exception& e) {
@@ -468,7 +467,7 @@ namespace Plugin {
         std::list<string> list;
 
         try {
-            auto strAudioPort = audioPort.empty() ? string(kDefaultAudioPort) : audioPort;
+            auto strAudioPort = audioPort.empty() ? device::Host::getInstance().getDefaultAudioPortName() : audioPort;
             auto& aPort = device::Host::getInstance().getAudioOutputPort(strAudioPort);
             const auto supportedProfiles = aPort.getMS12AudioProfileList();
             for (size_t i = 0; i < supportedProfiles.size(); i++) {
