@@ -15,14 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set(PLUGIN_NAME MemMonitor)
+set(PLUGIN_NAME SwitchBoard)
 set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
-set(PLUGIN_MEMMONITOR_AUTOSTART "false" CACHE STRING "Automatically start Memory Monitor plugin")
-set(PLUGIN_MEMMONITOR_MODE "Off" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
-set(PLUGIN_MEMMONITOR_HOMEURL "${PLUGIN_MEMMONITOR_HOMEURL}" CACHE STRING  "Default URL for ResidentApp")
-set(PLUGIN_MEMMONITOR_LOW_MEM_LIMIT "${PLUGIN_MEMMONITOR_LOW_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger low memory events")
-set(PLUGIN_MEMMONITOR_CRITICAL_MEM_LIMIT "${PLUGIN_MEMMONITOR_CRITICAL_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger critical memory events")
+set(PLUGIN_SWITCHBOARD_AUTOSTART "false" CACHE STRING "Automatically start SwitchBoard plugin")
+set(PLUGIN_SWITCHBOARD_MODE "Off" CACHE STRING "Controls if the plugin should run in its own process, in process or remote")
+set(PLUGIN_SWITCHBOARD_HOMEURL "${PLUGIN_SWITCHBOARD_HOMEURL}" CACHE STRING  "Default URL for ResidentApp")
+set(PLUGIN_SWITCHBOARD_LOW_MEM_LIMIT "${PLUGIN_SWITCHBOARD_LOW_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger low memory events")
+set(PLUGIN_SWITCHBOARD_CRITICAL_MEM_LIMIT "${PLUGIN_SWITCHBOARD_CRITICAL_MEM_LIMIT}" CACHE STRING  "Memory limit to trigger critical memory events")
 
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(${NAMESPACE}Definitions REQUIRED)
@@ -31,7 +31,7 @@ find_package(CompileSettingsDebug CONFIG REQUIRED)
 find_package(IARMBus REQUIRED)
 
 add_library(${MODULE_NAME} SHARED
-    MemMonitor.cpp
+    SwitchBoard.cpp
     Module.cpp
     ../helpers/utils.cpp
     ../helpers/tptimer.cpp

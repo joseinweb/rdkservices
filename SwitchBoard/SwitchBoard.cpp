@@ -1,4 +1,4 @@
-#include "MemMonitor.h"
+#include "SwitchBoard.h"
 #include <iostream>
 #define SERVER_DETAILS "127.0.0.1:9998"
 #define SUBSCRIPTION_CALLSIGN "org.rdk.RDKShell"
@@ -10,7 +10,7 @@
 #define SUBSCRIPTION_ONLAUNCHED_EVENT "onLaunched"
 #define SUBSCRIPTION_ONDESTROYED_EVENT "onDestroyed"
 
-#define REVISION "1.42g"
+#define REVISION "1.0"
 #define RECONNECTION_TIME_IN_MILLISECONDS 5500
 #define THUNDER_TIMEOUT 2000
 
@@ -20,7 +20,7 @@ namespace WPEFramework
     {
         static std::string gThunderAccessValue = SERVER_DETAILS;
         static std::string sThunderSecurityToken;
-        void MemMonitor::onCriticalMemoryEvent(const JsonObject &parameters)
+        void SwitchBoard::onCriticalMemoryEvent(const JsonObject &parameters)
         {
             string message;
             parameters.ToString(message);
@@ -31,7 +31,7 @@ namespace WPEFramework
                 PluginHost::WorkerPool::Instance().Submit(Job::Create(this, OFFLOAD));
             }
         }
-        void MemMonitor::onLowMemoryEvent(const JsonObject &parameters)
+        void SwitchBoard::onLowMemoryEvent(const JsonObject &parameters)
         {
             string message;
             parameters.ToString(message);
@@ -40,7 +40,7 @@ namespace WPEFramework
             PluginHost::WorkerPool::Instance().Submit(Job::Create(this, KEEP_ACTIVE_APP));
         }
 
-        void MemMonitor::onKeyEvent(const JsonObject &parameters)
+        void SwitchBoard::onKeyEvent(const JsonObject &parameters)
         {
             string message, clients;
             if (parameters.HasLabel("keycode"))
@@ -70,7 +70,7 @@ namespace WPEFramework
                 }
             }
         }
-        void MemMonitor::onLaunched(const JsonObject &parameters)
+        void SwitchBoard::onLaunched(const JsonObject &parameters)
         {
             if (parameters.HasLabel("client"))
             {
@@ -81,14 +81,14 @@ namespace WPEFramework
                     updateState(true, false);
             }
         }
-        void MemMonitor::updateState(bool running, bool started)
+        void SwitchBoard::updateState(bool running, bool started)
         {
             m_callMutex.Lock();
             m_isResAppRunning = running;
             m_launchInitiated = started;
             m_callMutex.Unlock();
         }
-        void MemMonitor::onDestroyed(const JsonObject &parameters)
+        void SwitchBoard::onDestroyed(const JsonObject &parameters)
         {
             // Case 1.Focused app is not referenceapp.
             LOGINFO(" m_isResAppRunning =%d m_launchInitiated = %d ", m_isResAppRunning, m_launchInitiated);
@@ -108,7 +108,7 @@ namespace WPEFramework
             }
         }
 
-        void MemMonitor::Dispatch(JOBTYPE jobType)
+        void SwitchBoard::Dispatch(JOBTYPE jobType)
         {
             string message, clients;
             JsonObject req, res;
@@ -169,7 +169,7 @@ namespace WPEFramework
             }
             }
         }
-        void MemMonitor::launchResidentApp()
+        void SwitchBoard::launchResidentApp()
         {
             JsonObject req, res;
             uint32_t status;
@@ -188,9 +188,9 @@ namespace WPEFramework
                     (status == Core::ERROR_NONE), C_STR(message));
         }
 
-        SERVICE_REGISTRATION(MemMonitor, 1, 0);
+        SERVICE_REGISTRATION(SwitchBoard, 1, 0);
 
-        MemMonitor::MemMonitor() : AbstractPlugin(2),
+        SwitchBoard::SwitchBoard() : AbstractPlugin(2),
                                    m_subscribedToEvents(false),
                                    m_remoteObject(nullptr),
                                    m_isResAppRunning(false),
@@ -200,13 +200,13 @@ namespace WPEFramework
                                    m_criticalMem(50)
         {
             LOGINFO();
-            m_timer.connect(std::bind(&MemMonitor::onTimer, this));
+            m_timer.connect(std::bind(&SwitchBoard::onTimer, this));
         }
-        MemMonitor::~MemMonitor()
+        SwitchBoard::~SwitchBoard()
         {
         }
 
-        void MemMonitor::offloadApplication(const string callsign)
+        void SwitchBoard::offloadApplication(const string callsign)
         {
             JsonObject req, res;
             uint32_t status;
@@ -215,7 +215,7 @@ namespace WPEFramework
             status = m_remoteObject->Invoke<JsonObject, JsonObject>(THUNDER_TIMEOUT, _T("destroy"), req, res);
             LOGINFO("Offloading  %s  result : %s", C_STR(callsign), (Core::ERROR_NONE == status) ? "Success" : "Failure");
         }
-        const string MemMonitor::Initialize(PluginHost::IShell *service)
+        const string SwitchBoard::Initialize(PluginHost::IShell *service)
         {
             LOGINFO();
 
@@ -255,7 +255,7 @@ namespace WPEFramework
             return "";
         }
 
-        void MemMonitor::Deinitialize(PluginHost::IShell * /* service */)
+        void SwitchBoard::Deinitialize(PluginHost::IShell * /* service */)
         {
 
             LOGINFO();
@@ -275,11 +275,11 @@ namespace WPEFramework
             }
         }
 
-        string MemMonitor::Information() const
+        string SwitchBoard::Information() const
         {
-            return (string("{\"service \": \"org.rdk.MemMonitor\"}"));
+            return (string("{\"service \": \"org.rdk.SwitchBoard\"}"));
         }
-        void MemMonitor::onTimer()
+        void SwitchBoard::onTimer()
         {
             m_callMutex.Lock();
             if (!m_subscribedToEvents)
@@ -298,7 +298,7 @@ namespace WPEFramework
             }
             m_callMutex.Unlock();
         }
-        void MemMonitor::SubscribeToEvents()
+        void SwitchBoard::SubscribeToEvents()
         {
             LOGINFO(" Attempting event subscription");
 
@@ -308,11 +308,11 @@ namespace WPEFramework
 
                 std::string serviceCallsign = "org.rdk.RDKShell.1";
 
-                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT), &MemMonitor::onLowMemoryEvent, this);
-                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_CRITICAL_MEMORY_EVENT), &MemMonitor::onCriticalMemoryEvent, this);
-                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT), &MemMonitor::onKeyEvent, this);
-                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT), &MemMonitor::onLaunched, this);
-                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &MemMonitor::onDestroyed, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_LOW_MEMORY_EVENT), &SwitchBoard::onLowMemoryEvent, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_CRITICAL_MEMORY_EVENT), &SwitchBoard::onCriticalMemoryEvent, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONKEY_EVENT), &SwitchBoard::onKeyEvent, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONLAUNCHED_EVENT), &SwitchBoard::onLaunched, this);
+                m_remoteObject->Subscribe<JsonObject>(THUNDER_TIMEOUT, _T(SUBSCRIPTION_ONDESTROYED_EVENT), &SwitchBoard::onDestroyed, this);
 
                 m_subscribedToEvents = true;
 
@@ -333,7 +333,7 @@ namespace WPEFramework
                 LOGINFO(" RDKShell is not yet active. Wait for it.. ");
             }
         }
-        void MemMonitor::setMemoryLimits()
+        void SwitchBoard::setMemoryLimits()
         {
             JsonObject req, res;
             uint32_t status = Core::ERROR_NONE;

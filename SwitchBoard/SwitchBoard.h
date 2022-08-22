@@ -37,7 +37,7 @@ namespace WPEFramework
             RESTORE_RES_APP
         };
 
-        class MemMonitor : public AbstractPlugin
+        class SwitchBoard : public AbstractPlugin
         {
             class Config : public Core::JSON::Container
             {
@@ -65,7 +65,7 @@ namespace WPEFramework
             class EXTERNAL Job : public Core::IDispatch
             {
             public:
-                Job(MemMonitor *monitor, JOBTYPE _jobType)
+                Job(SwitchBoard *monitor, JOBTYPE _jobType)
                     : _monitor(monitor), jobType(_jobType)
                 {
 
@@ -81,7 +81,7 @@ namespace WPEFramework
                 Job &operator=(const Job &) = delete;
 
             public:
-                static Core::ProxyType<Core::IDispatch> Create(MemMonitor *mon, JOBTYPE jobType)
+                static Core::ProxyType<Core::IDispatch> Create(SwitchBoard *mon, JOBTYPE jobType)
                 {
                     return (Core::proxy_cast<Core::IDispatch>(Core::ProxyType<Job>::Create(mon, jobType)));
                 }
@@ -91,12 +91,12 @@ namespace WPEFramework
                 }
 
             private:
-                MemMonitor *_monitor;
+                SwitchBoard *_monitor;
                 JOBTYPE jobType;
             };
 
-            MemMonitor(const MemMonitor &) = delete;
-            MemMonitor &operator=(const MemMonitor &) = delete;
+            SwitchBoard(const SwitchBoard &) = delete;
+            SwitchBoard &operator=(const SwitchBoard &) = delete;
 
             void Dispatch(JOBTYPE keycode);
 
@@ -130,8 +130,8 @@ namespace WPEFramework
             std::list<string> callsigns;
 
         public:
-            MemMonitor();
-            virtual ~MemMonitor();
+            SwitchBoard();
+            virtual ~SwitchBoard();
             virtual const string Initialize(PluginHost::IShell *service) override;
             virtual void Deinitialize(PluginHost::IShell *service) override;
             virtual string Information() const override;

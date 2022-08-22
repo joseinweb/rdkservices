@@ -1,5 +1,0 @@
-{
- "locator":"libWPEFrameworkMemMonitor.so",
- "classname":"MemMonitor",
- "callsign":"org.rdk.MemMonitor"
-}

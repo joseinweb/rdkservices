@@ -1,0 +1,5 @@
+{
+ "locator":"libWPEFrameworkSwitchBoard.so",
+ "classname":"SwitchBoard",
+ "callsign":"org.rdk.SwitchBoard"
+}
