@@ -1026,14 +1026,26 @@ namespace WPEFramework {
                 for (size_t i = 0; i < aPorts.size(); i++)
                 {
                     device::AudioOutputPort &aPort = aPorts.at(i);
+                    string portName = aPort.getName();
                     if (aPort.isConnected())
                     {
-                        string portName = aPort.getName();
                         if((portName == "HDMI_ARC0") && (m_hdmiInAudioDeviceConnected != true)) {
                             continue;
                         }
                         vectorSet(connectedAudioPorts, portName);
                     }
+		    else if (portName == "HDMI_ARC0" && m_hdmiInAudioDeviceConnected == true && m_arcEarcAudioEnabled == false)
+		    {
+	               /* This is the case where we get ARC initiation or eARC detection done before HPD.Send connectedport update as ARC disconnected and Restart the ARC-eARC again */
+			m_hdmiInAudioDeviceConnected = false;
+			m_hdmiInAudioDevicePowerState = AUDIO_DEVICE_POWER_STATE_UNKNOWN;
+			m_currentArcRoutingState = ARC_STATE_ARC_TERMINATED;
+			m_hdmiInAudioDeviceType = dsAUDIOARCSUPPORT_NONE;
+			m_AudioDeviceSADState = AUDIO_DEVICE_SAD_UNKNOWN;
+			DisplaySettings::_instance->connectedAudioPortUpdated(dsAUDIOPORT_TYPE_HDMI_ARC, false);
+			LOGINFO("[HDMI_ARC0] sendHdmiCecSinkAudioDevicePowerOn !!! \n");
+			sendMsgToQueue(SEND_AUDIO_DEVICE_POWERON_MSG, NULL);
+		    }
                 }
             }
             catch(const device::Exception& err)
@@ -2868,6 +2880,33 @@ namespace WPEFramework {
                 }
                 returnResponse(success);
         }
+	#define KEY_PRESSES_AT_ONCE 5
+        void DisplaySettings::setVolumeThread( int level)
+        {
+            LOGINFO("Entry  %s:  level: %d hdmiArcVolumeLevel:%d \n",__FUNCTION__,level,hdmiArcVolumeLevel);
+	    do
+	    {
+                JsonObject hdmiCecSinkResult;
+                JsonObject params;
+		// 5 is logical address for audio system
+                params["logicalAddress"] = 5;
+		// key code for volume up and down key event
+                params["keyCode"] =(level > hdmiArcVolumeLevel)?0x41:0x42;
+		int loopCount  = abs(level-hdmiArcVolumeLevel);
+                loopCount=(loopCount>KEY_PRESSES_AT_ONCE)?KEY_PRESSES_AT_ONCE:loopCount;
+
+                for(int i =0; i< loopCount;i++  )
+	        {
+                    _instance->m_client->Invoke<JsonObject, JsonObject>(2000, "sendKeyPressEvent", params, hdmiCecSinkResult);
+                    if (!hdmiCecSinkResult["success"].Boolean()) {
+                        LOGERR("%s HdmiCecSink Plugin sendKeyPressEvent returned error\n",__FUNCTION__);
+                    }
+	        }
+		sleep(3);
+                LOGINFO("After iteration %s:  level: %d hdmiArcVolumeLevel:%d loopCount:%d \n",__FUNCTION__,level,hdmiArcVolumeLevel,loopCount);
+	    }while( abs(level-hdmiArcVolumeLevel) > KEY_PRESSES_AT_ONCE/2 );
+            LOGINFO("Exit  %s:  level: %d hdmiArcVolumeLevel:%d \n",__FUNCTION__,level,hdmiArcVolumeLevel);
+        }
 
         uint32_t DisplaySettings::setVolumeLevel(const JsonObject& parameters, JsonObject& response)
         {
@@ -2887,16 +2926,24 @@ namespace WPEFramework {
                 string audioPort = parameters.HasLabel("audioPort") ? parameters["audioPort"].String() : "HDMI0";
                 try
                 {
-                        device::AudioOutputPort aPort = device::Host::getInstance().getAudioOutputPort(audioPort);
-                        aPort.setLevel(level);
-                        if(cache_volumelevel != (int)level)
-                        {
-                            cache_volumelevel = (int)level;
-                            JsonObject params;
-                            params["volumeLevel"] = (int)level;
-                            sendNotify("volumeLevelChanged", params);
-                        }
-                        success= true;
+                    if( audioPort != "HDMI_ARC0")
+                    {
+                         device::AudioOutputPort aPort = device::Host::getInstance().getAudioOutputPort(audioPort);
+                         aPort.setLevel(level);
+                    }
+                    else
+                    {
+                        std::thread t_setVolThread = std::thread(setVolumeThread,(int)level);
+                        t_setVolThread.detach();
+                    }
+                    if(cache_volumelevel != (int)level)
+                    {
+                        cache_volumelevel = (int)level;
+                        JsonObject params;
+                        params["volumeLevel"] = (int)level;
+                        sendNotify("volumeLevelChanged", params);
+                    }
+                    success= true;
                 }
                 catch (const device::Exception& err)
                 {
