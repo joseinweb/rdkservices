@@ -56,16 +56,26 @@ namespace WPEFramework
                     for (std::list<std::shared_ptr<avahi::RDKDevice> >::iterator it = devices.begin(); it != devices.end(); ++it)
                     {
                         std::shared_ptr<avahi::RDKDevice> device = *it;
+                        std::cout << "Found IOT Gateway device " << device->ipAddress << ":" << device->port << std::endl;
                         if (device->addrType == avahi::IP_ADDR_TYPE::IPV4)
+                        {
+                            std::cout << "Found ipv4 device " << device->ipAddress << ":" << device->port << std::endl;
                             return "tcp://" + device->ipAddress + ":" + std::to_string(device->port);
+                        }
                     }
                 }
+                else
+                {
+                    std::cout << " Failed to identify RDK IoT Gateway." << std::endl;
+                }
                 avahi::unInitialize();
+                std::cout << " Failed to identify IPV4 RDK IoT Gateway." << std::endl;
             }
             else
             {
                 std::cout << " Failed to initialize avahi " << std::endl;
             }
+
             return "";
         }
 
@@ -75,7 +85,7 @@ namespace WPEFramework
             : PluginHost::JSONRPC(), m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
         {
 
-            Register("getAvailableDevices", &RIoTControl::getAvailableDevicesWrapper, this);
+            Register("getAvailableDevices", &RIoTControl::getAvailableDevices, this);
             Register("getDeviceProperties", &RIoTControl::getDeviceProperties, this);
             Register("getDeviceProperty", &RIoTControl::getDeviceProperty, this);
             Register("sendCommand", &RIoTControl::sendCommand, this);
@@ -87,11 +97,7 @@ namespace WPEFramework
 
         const string RIoTControl::Initialize(PluginHost::IShell * /* service */)
         {
-            string msg;
-            remote_addr = getRemoteAddress();
-            if(remote_addr.empty())
-                msg = "Failed to retrieve remote address";
-            return (msg);
+            return "";
         }
         void RIoTControl::Deinitialize(PluginHost::IShell * /* service */)
         {
@@ -101,11 +107,23 @@ namespace WPEFramework
             return (string());
         }
 
+        bool RIoTControl::connectToRemote()
+        {
+            if (remote_addr.empty())
+            {
+                remote_addr = getRemoteAddress();
+            }
+
+            if (!remote_addr.empty())
+                return iotbridge::initializeIPC(remote_addr);
+            return false;
+        }
+
         // Supported methods
-        uint32_t RIoTControl::getAvailableDevicesWrapper(const JsonObject &parameters, JsonObject &response)
+        uint32_t RIoTControl::getAvailableDevices(const JsonObject &parameters, JsonObject &response)
         {
             bool success = false;
-            if (!remote_addr.empty() && iotbridge::initializeIPC(remote_addr))
+            if (connectToRemote())
             {
                 std::list<std::shared_ptr<WPEFramework::iotbridge::IOTDevice> > deviceList;
                 JsonArray devArray;
@@ -136,48 +154,69 @@ namespace WPEFramework
         {
             bool success = false;
 
-            returnResponse(success);
+            returnIfParamNotFound(parameters, "deviceId");
+
+            if (connectToRemote())
+            {
+
+                std::list<std::string> properties;
+                std::string uuid = parameters["deviceId"].String();
+
+                iotbridge::getDeviceProperties(uuid, properties);
+                std::cout << " Value returned is " << properties.size() << std::endl;
+
+                success = true;
+                iotbridge::cleanupIPC();
+            }
+            else
+            {
+                std::cout << "Failed to connect to IoT Gateway" << std::endl;
+            }
+
+            return (success);
         }
         uint32_t RIoTControl::getDeviceProperty(const JsonObject &parameters, JsonObject &response)
         {
             bool success = false;
-            if (parameters.HasLabel("deviceId") && parameters.HasLabel("propName"))
+            returnIfParamNotFound(parameters, "deviceId");
+            returnIfParamNotFound(parameters, "propName");
+
+            if (connectToRemote())
             {
-                response["message"] = "Missing parameters deviceId or propName";
+                std::string uuid = parameters["deviceId"].String();
+                std::string prop = parameters["propName"].String();
+                std::string propVal = iotbridge::getDeviceProperty(uuid, prop);
+                response["value"] = propVal;
+                success = true;
+                iotbridge::cleanupIPC();
             }
             else
             {
-                if (!remote_addr.empty() && iotbridge::initializeIPC(remote_addr))
-                {
-                    std::string uuid = parameters["deviceId"].String();
-                    std::string prop = parameters["propName"].String();
-                    std::string propVal = iotbridge::getDeviceProperty(uuid, prop);
-                    response["value"] = propVal;
-                    success = true;
-                    iotbridge::cleanupIPC();
-                }
+                response["message"] = "Failed to connect to IoT Gateway";
             }
+
             returnResponse(success);
         }
         uint32_t RIoTControl::sendCommand(const JsonObject &parameters, JsonObject &response)
         {
             bool success = false;
-            if (parameters.HasLabel("deviceId") && parameters.HasLabel("command"))
+            returnIfParamNotFound(parameters, "deviceId");
+            returnIfParamNotFound(parameters, "command");
+
+            if (connectToRemote())
             {
-                response["message"] = "Missing parameters deviceId or command";
+                std::string uuid = parameters["deviceId"].String();
+                std::string cmd = parameters["command"].String();
+                if (0 == iotbridge::sendCommand(uuid, cmd))
+                    success = true;
+
+                iotbridge::cleanupIPC();
             }
             else
             {
-                if (!remote_addr.empty() && iotbridge::initializeIPC(remote_addr))
-                {
-                    std::string uuid = parameters["deviceId"].String();
-                    std::string cmd = parameters["command"].String();
-                    if (0 == iotbridge::sendCommand(uuid, cmd))
-                        success = true;
-
-                    iotbridge::cleanupIPC();
-                }
+                response["message"] = "Failed to connect to IoT Gateway";
             }
+
             returnResponse(success);
         }
 

@@ -45,7 +45,7 @@ namespace avahi
 
     void onDeviceStatusChanged(AvahiClient *ac, AvahiClientState acs, void *udata)
     {
-        std::cout << "onDeviceStatusChanged" << std::endl;
+        std::cout << "[onDeviceStatusChanged] Device status changed" << std::endl;
         if (AVAHI_CLIENT_FAILURE == acs)
         {
             // Need to stop polling. Some issues with the client connection.
@@ -67,7 +67,7 @@ namespace avahi
                            AvahiLookupResultFlags flags,
                            void *userdata)
     {
-        std::cout << "onServiceResolved" << std::endl;
+        std::cout << "[onServiceResolved]" << std::endl;
         if (AVAHI_RESOLVER_FOUND == event)
         {
             char a[AVAHI_ADDRESS_STR_MAX];
@@ -80,6 +80,7 @@ namespace avahi
             device->ipAddress = a;
             device->addrType = (address->proto == AVAHI_PROTO_INET ? IPV4 : IPV6);
             deviceList.push_back(device);
+            stopDiscovery();
         }
         avahi_service_resolver_free(r);
     }
@@ -108,7 +109,7 @@ namespace avahi
             break;
         case AVAHI_BROWSER_ALL_FOR_NOW:
             std::cout << "onServiceDiscovery AVAHI_BROWSER_ALL_FOR_NOW" << std::endl;
-            stopDiscovery();
+            //stopDiscovery();
             break;
         case AVAHI_BROWSER_REMOVE:
             std::cout << "onServiceDiscovery AVAHI_BROWSER_REMOVE called " << std::endl;
@@ -122,10 +123,10 @@ namespace avahi
     bool stopDiscovery()
     {
         std::thread::id this_id = std::this_thread::get_id();
-        std::cout << "stopDiscovery, thread id " << this_id << std::endl;
+        std::cout << "[stopDiscovery], thread id " << this_id << std::endl;
         std::lock_guard<std::mutex> lockguard(m_stateMutex);
         m_scanInProgress = false;
-        m_stateCond.notify_one();
+        m_stateCond.notify_all();
         return true;
     }
     bool initialize(const std::string &serviceName)
@@ -162,16 +163,15 @@ namespace avahi
     int discoverDevices(std::list<std::shared_ptr<RDKDevice> > &devices, int timeoutMillis)
     {
 
-        std::cout << "discoverDevices" << std::endl;
+        std::cout << "[discoverDevices] discoverDevices" << std::endl;
         // Let us clear existing deviceList;
         if (m_scanInProgress)
             return DD_SCAN_ALREADY_IN_PROGRESS;
-        // std::thread t([timeoutMillis]
-        //               {
+
         deviceList.clear();
         // Let us put the scan in progress.
         m_scanInProgress = true;
-        std::cout << "Starting scanning" << std::endl;
+        std::cout << "[discoverDevices] Starting scanning" << std::endl;
         avahi_threaded_poll_start(thread_poll);
 
         std::unique_lock<std::mutex> lock(m_stateMutex);
@@ -181,12 +181,11 @@ namespace avahi
         while (std::chrono::steady_clock::now() < endTime)
         {
 
-            // Error occured in between ?
+            // Got a device or error occured?
             if (!m_scanInProgress)
             {
                 std::thread::id this_id = std::this_thread::get_id();
-                std::cout << "stopping  scanning " << this_id << std::endl;
-                avahi_threaded_poll_stop(thread_poll);
+                std::cout << "[discoverDevices] Got devices. breaking.." << this_id << std::endl;
                 break;
             }
 
@@ -196,13 +195,7 @@ namespace avahi
 
             m_stateCond.wait_for(lock, remainingTime);
         }
-        std::cout << "Outside While loop" << std::endl;
-        if (m_scanInProgress)
-        {
-            avahi_threaded_poll_stop(thread_poll);
-            m_scanInProgress = false;
-        } //});
-
+        std::cout << "[discoverDevices] Total devices found " << deviceList.size() << std::endl;
         for (std::list<std::shared_ptr<RDKDevice> >::iterator it = deviceList.begin(); it != deviceList.end(); ++it)
             devices.push_back(*it);
         return deviceList.size();
@@ -220,8 +213,11 @@ namespace avahi
         if (client)
             avahi_client_free(client);
         if (thread_poll)
-            avahi_threaded_poll_free(thread_poll);
-
+        {
+            avahi_threaded_poll_lock(thread_poll);
+            avahi_threaded_poll_stop(thread_poll);
+            avahi_threaded_poll_unlock(thread_poll);
+        }
         m_initialized = false;
         sb = nullptr;
         client = nullptr;

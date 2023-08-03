@@ -51,8 +51,8 @@ namespace WPEFramework
             std::string remote_addr;
 
             // Available functions
-
-            uint32_t getAvailableDevicesWrapper(const JsonObject &parameters, JsonObject &response);
+            bool connectToRemote();
+            uint32_t getAvailableDevices(const JsonObject &parameters, JsonObject &response);
             uint32_t getDeviceProperties(const JsonObject &parameters, JsonObject &response);
             uint32_t getDeviceProperty(const JsonObject &parameters, JsonObject &response);
             uint32_t sendCommand(const JsonObject &parameters, JsonObject &response);

@@ -26,7 +26,7 @@
 namespace avahi
 {
     extern const std::string RDK_SERVICE_NAME;
-    const int DD_TIMEOUT_MILLIS = 5000;
+    const int DD_TIMEOUT_MILLIS = 1000;
     const int DD_SCAN_ALREADY_IN_PROGRESS = -1;
 
     enum IP_ADDR_TYPE
