@@ -23,7 +23,7 @@
 #include <atomic>
 
 #include "Module.h"
-
+#include "RIoTConnector.h"
 namespace WPEFramework
 {
     namespace Plugin
@@ -43,12 +43,37 @@ namespace WPEFramework
         class RIoTControl : public PluginHost::IPlugin, public PluginHost::JSONRPC
         {
         private:
+            class Job : public Core::IDispatch
+            {
+            public:
+                Job() = delete;
+                Job(const Job &) = delete;
+                Job &operator=(const Job &) = delete;
+
+                Job(RIoTControl *parent)
+                    : _parent(*parent)
+                {
+                }
+                ~Job() override = default;
+
+            public:
+                void Dispatch() override
+                {
+                    _parent.connectToRemote();
+                }
+
+            private:
+                RIoTControl &_parent;
+            };
+
+        private:
             // We do not allow this plugin to be copied !!
             RIoTControl(const RIoTControl &) = delete;
             RIoTControl &operator=(const RIoTControl &) = delete;
 
             int m_apiVersionNumber;
             std::string remote_addr;
+            iotbridge::RIoTConnector *riotConn;
 
             // Available functions
             bool connectToRemote();
@@ -58,6 +83,10 @@ namespace WPEFramework
             uint32_t sendCommand(const JsonObject &parameters, JsonObject &response);
 
             bool initializeIPC();
+        
+
+            const Core::ProxyType<Job> _job;
+            bool connectedToRemote;
 
         public:
             RIoTControl();

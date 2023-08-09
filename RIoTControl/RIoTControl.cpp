@@ -20,8 +20,8 @@
 #include "RIoTControl.h"
 #include "UtilsJsonRpc.h"
 #include "AvahiClient.h"
-#include "RIoTConnector.h"
 
+#include <sstream>
 #define API_VERSION_NUMBER_MAJOR 1
 #define API_VERSION_NUMBER_MINOR 0
 #define API_VERSION_NUMBER_PATCH 0
@@ -82,9 +82,9 @@ namespace WPEFramework
         SERVICE_REGISTRATION(RIoTControl, API_VERSION_NUMBER_MAJOR, API_VERSION_NUMBER_MINOR, API_VERSION_NUMBER_PATCH);
 
         RIoTControl::RIoTControl()
-            : PluginHost::JSONRPC(), m_apiVersionNumber(API_VERSION_NUMBER_MAJOR)
+            : PluginHost::JSONRPC(), m_apiVersionNumber(API_VERSION_NUMBER_MAJOR), riotConn(nullptr),
+              _job(Core::ProxyType<Job>::Create(this)), connectedToRemote(false)
         {
-
             Register("getAvailableDevices", &RIoTControl::getAvailableDevices, this);
             Register("getDeviceProperties", &RIoTControl::getDeviceProperties, this);
             Register("getDeviceProperty", &RIoTControl::getDeviceProperty, this);
@@ -97,10 +97,18 @@ namespace WPEFramework
 
         const string RIoTControl::Initialize(PluginHost::IShell * /* service */)
         {
+            riotConn = new iotbridge::RIoTConnector();
+            Core::IWorkerPool::Instance().Submit(Core::proxy_cast<Core::IDispatchType<void> >(_job));
             return "";
         }
         void RIoTControl::Deinitialize(PluginHost::IShell * /* service */)
         {
+            riotConn->cleanupIPC();
+            delete riotConn;
+            riotConn = nullptr;
+
+            connectedToRemote = false;
+            remote_addr = "";
         }
         string RIoTControl::Information() const
         {
@@ -109,25 +117,28 @@ namespace WPEFramework
 
         bool RIoTControl::connectToRemote()
         {
+            std::cout << "[RIoTControl::connectToRemote] Starting worker thread..." << std::endl;
+
             if (remote_addr.empty())
             {
                 remote_addr = getRemoteAddress();
             }
 
             if (!remote_addr.empty())
-                return iotbridge::initializeIPC(remote_addr);
-            return false;
+                connectedToRemote = riotConn->initializeIPC(remote_addr);
+            std::cout << "[RIoTControl::connectToRemote] completed .Remote address: " << remote_addr.c_str() << std::endl;
+            return connectedToRemote;
         }
 
         // Supported methods
         uint32_t RIoTControl::getAvailableDevices(const JsonObject &parameters, JsonObject &response)
         {
             bool success = false;
-            if (connectToRemote())
+            if (connectedToRemote)
             {
                 std::list<std::shared_ptr<WPEFramework::iotbridge::IOTDevice> > deviceList;
                 JsonArray devArray;
-                if (iotbridge::getDeviceList(deviceList) > 0)
+                if (riotConn->getDeviceList(deviceList) > 0)
                 {
 
                     for (const auto &device : deviceList)
@@ -135,13 +146,12 @@ namespace WPEFramework
                         JsonObject deviceObj;
                         deviceObj["name"] = device->deviceName;
                         deviceObj["uuid"] = device->deviceId;
-                        deviceObj["type"] = (device->devType == WPEFramework::iotbridge::IOT_DEVICE_TYPE::CAMERA) ? "Camera" : "Bulb";
+                        deviceObj["type"] = device->devType;
                         devArray.Add(deviceObj);
                     }
                 }
                 response["devices"] = devArray;
                 success = true;
-                iotbridge::cleanupIPC();
             }
             else
             {
@@ -156,24 +166,37 @@ namespace WPEFramework
 
             returnIfParamNotFound(parameters, "deviceId");
 
-            if (connectToRemote())
+            if (connectedToRemote)
             {
 
                 std::list<std::string> properties;
                 std::string uuid = parameters["deviceId"].String();
 
-                iotbridge::getDeviceProperties(uuid, properties);
+                riotConn->getDeviceProperties(uuid, properties);
                 std::cout << " Value returned is " << properties.size() << std::endl;
 
+                JsonObject propObj;
+                for (std::string const &property : properties)
+                {
+
+                    std::stringstream stream(property);
+                    std::string key, value;
+                    std::getline(stream, key, '=');
+                    std::getline(stream, value, '=');
+                    propObj[key.c_str()] = value;
+                }
+
+                response["properties"] = propObj;
+
                 success = true;
-                iotbridge::cleanupIPC();
             }
             else
             {
+                response["message"] = "Failed to connect to IoT Gateway";
                 std::cout << "Failed to connect to IoT Gateway" << std::endl;
             }
 
-            return (success);
+            returnResponse(success);
         }
         uint32_t RIoTControl::getDeviceProperty(const JsonObject &parameters, JsonObject &response)
         {
@@ -181,14 +204,13 @@ namespace WPEFramework
             returnIfParamNotFound(parameters, "deviceId");
             returnIfParamNotFound(parameters, "propName");
 
-            if (connectToRemote())
+            if (connectedToRemote)
             {
                 std::string uuid = parameters["deviceId"].String();
                 std::string prop = parameters["propName"].String();
-                std::string propVal = iotbridge::getDeviceProperty(uuid, prop);
+                std::string propVal = riotConn->getDeviceProperty(uuid, prop);
                 response["value"] = propVal;
                 success = true;
-                iotbridge::cleanupIPC();
             }
             else
             {
@@ -203,14 +225,12 @@ namespace WPEFramework
             returnIfParamNotFound(parameters, "deviceId");
             returnIfParamNotFound(parameters, "command");
 
-            if (connectToRemote())
+            if (connectedToRemote)
             {
                 std::string uuid = parameters["deviceId"].String();
                 std::string cmd = parameters["command"].String();
-                if (0 == iotbridge::sendCommand(uuid, cmd))
+                if (0 == riotConn->sendCommand(uuid, cmd))
                     success = true;
-
-                iotbridge::cleanupIPC();
             }
             else
             {

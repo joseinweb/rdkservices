@@ -21,7 +21,6 @@
 #include <list>
 #include <memory>
 #include <iostream>
-#include "rtConnection.h"
 #include "rtMessage.h"
 
 #include "RIoTConnector.h"
@@ -36,27 +35,26 @@ namespace WPEFramework
     namespace iotbridge
     {
 
-        rtConnection con;
-        rtError rtConnStatus = RT_NO_CONNECTION;
 
-        bool initializeIPC(const std::string &remoteAddr)
+
+        bool RIoTConnector::initializeIPC(const std::string &remoteAddr)
         {
-            std::cout << "[initializeIPC]Connecting to remote server " << remoteAddr << std::endl;
+            std::cout << "[RIoTConnector][initializeIPC]Connecting to remote server " << remoteAddr << std::endl;
             rtConnStatus = rtConnection_Create(&con, "RIoT", remoteAddr.c_str());
-            std::cout << "[initializeIPC]Connection status " << rtConnStatus << std::endl;
+            std::cout << "[RIoTConnector][initializeIPC]Connection status " << rtConnStatus << std::endl;
             return rtConnStatus == RT_OK ? true : false;
         }
 
-        void cleanupIPC()
+        void RIoTConnector::cleanupIPC()
         {
             if (RT_OK == rtConnStatus)
                 rtConnection_Destroy(con);
             rtConnStatus = RT_NO_CONNECTION;
         }
-        int getDeviceList(std::list<std::shared_ptr<IOTDevice> > &deviceList)
+        int RIoTConnector::getDeviceList(std::list<std::shared_ptr<IOTDevice> > &deviceList)
         {
             int count = -1;
-            std::cout << "[getDeviceList] Connection status  " << rtConnStatus << std::endl;
+            std::cout << "[RIoTConnector][getDeviceList] Connection status  " << rtConnStatus << std::endl;
             if (RT_OK != rtConnStatus)
                 return count;
 
@@ -68,16 +66,16 @@ namespace WPEFramework
             rtMessage_SetSendTopic(req, "RIoT");
 
             result = rtConnection_SendRequest(con, req, RBUS_METHOD_GETDEVICES, &res, RTMESSAGE_TIMEOUT_MILLIS);
-            std::cout << "[getDeviceList] RPC returns " << rtStrError(result) << std::endl;
+            std::cout << "[RIoTConnector][getDeviceList] RPC returns " << rtStrError(result) << std::endl;
             if (RT_OK == result)
             {
                 char *entry;
                 uint32_t outLen;
                 rtMessage_ToString(res, &entry, &outLen);
-                std::cout << "[getDeviceList]Returning the response " << entry << std::endl;
+                std::cout << "[RIoTConnector][getDeviceList]Returning the response " << entry << std::endl;
                 free(entry);
                 rtMessage_GetArrayLength(res, "devices", &count);
-                std::cout << "[getDeviceList] array count " << count << std::endl;
+                std::cout << "[RIoTConnector][getDeviceList] array count " << count << std::endl;
 
                 for (int i = 0; i < count; i++)
                 {
@@ -87,7 +85,7 @@ namespace WPEFramework
                     result = rtMessage_GetMessageItem(res, "devices", i, &devEntry);
 
                     rtMessage_ToString(devEntry, &entry, &outLen);
-                    std::cout << "[getDeviceList]Returning the response " << entry << std::endl;
+                    std::cout << "[RIoTConnector][getDeviceList]Returning the response " << entry << std::endl;
                     free(entry);
 
                     rtMessage_GetString(devEntry, "name", (const char **)&entry);
@@ -97,24 +95,22 @@ namespace WPEFramework
                     device->deviceId = entry;
 
                     rtMessage_GetString(devEntry, "devType", (const char **)&entry);
-                    int x = std::stoi(entry);
-                    device->devType = x == 0 ? CAMERA : LIGHT_BULB;
 
                     deviceList.push_back(device);
                 }
-                std::cout << "[getDeviceList] Done " << std::endl;
+                std::cout << "[RIoTConnector][getDeviceList] Done " << std::endl;
                 rtMessage_Release(res);
             }
             else
             {
-                std::cout << "[getDeviceList] rtConnection_SendRequest failed   " << std::endl;
+                std::cout << "[RIoTConnector][getDeviceList] rtConnection_SendRequest failed   " << std::endl;
             }
-            std::cout << "[getDeviceList] Total count " << deviceList.size() << std::endl;
+            std::cout << "[RIoTConnector][getDeviceList] Total count " << deviceList.size() << std::endl;
             rtMessage_Release(req);
 
             return count;
         }
-        int getDeviceProperties(const std::string &uuid, std::list<std::string> &propList)
+        int RIoTConnector::getDeviceProperties(const std::string &uuid, std::list<std::string> &propList)
         {
             int count = -1;
 
@@ -127,18 +123,18 @@ namespace WPEFramework
 
             rtMessage_SetSendTopic(req, "RIoT");
             err = rtConnection_SendRequest(con, req, RBUS_METHOD_GETDEVICEPROPERTIES, &res, RTMESSAGE_TIMEOUT_MILLIS);
-            std::cout << "RPC returns " << rtStrError(err) << std::endl;
+                std::cout << "[RIoTConnector][getDeviceProperties]RPC returns " << rtStrError(err) << std::endl;
             if (RT_OK == err)
             {
 
                 char *entry;
                 uint32_t outLen;
                 rtMessage_ToString(res, &entry, &outLen);
-                std::cout << "[getDeviceList]Returning the response " << entry << std::endl;
+                std::cout << "[RIoTConnector][getDeviceProperties]Returning the response " << entry << std::endl;
                 free(entry);
 
                 rtMessage_GetArrayLength(res, "properties", &count);
-                std::cout << "[getDeviceProperties] array count " << count << std::endl;
+                std::cout << "[RIoTConnector][getDeviceProperties] array count " << count << std::endl;
 
                 for (int i = 0; i < count; i++)
                 {
@@ -151,7 +147,7 @@ namespace WPEFramework
             rtMessage_Release(req);
             return count;
         }
-        std::string getDeviceProperty(const std::string &uuid, const std::string &propertyName)
+        std::string RIoTConnector::getDeviceProperty(const std::string &uuid, const std::string &propertyName)
         {
             std::string value;
 
@@ -167,7 +163,7 @@ namespace WPEFramework
             rtMessage_SetString(req, "deviceId", uuid.c_str());
             rtMessage_SetString(req, "property", propertyName.c_str());
             err = rtConnection_SendRequest(con, req, RBUS_METHOD_GETDEVICEPROPERTY, &res, RTMESSAGE_TIMEOUT_MILLIS);
-            std::cout << "RPC returns " << rtStrError(err) << std::endl;
+            std::cout << "[RIoTConnector][getDeviceProperty]RPC returns " << rtStrError(err) << std::endl;
 
             if (RT_OK == err)
             {
@@ -180,7 +176,7 @@ namespace WPEFramework
             rtMessage_Release(req);
             return value;
         }
-        int sendCommand(const std::string &uuid, const std::string &cmd)
+        int RIoTConnector::sendCommand(const std::string &uuid, const std::string &cmd)
         {
             int status = -1;
 
@@ -196,7 +192,7 @@ namespace WPEFramework
             rtMessage_SetString(req, "deviceId", uuid.c_str());
             rtMessage_SetString(req, "command", cmd.c_str());
             err = rtConnection_SendRequest(con, req, RBUS_METHOD_SENDCOMMAND, &res, RTMESSAGE_TIMEOUT_MILLIS);
-            std::cout << "RPC returns " << rtStrError(err) << std::endl;
+            std::cout << "[RIoTConnector][sendCommand] RPC returns " << rtStrError(err) << std::endl;
 
             if (RT_OK == err)
             {

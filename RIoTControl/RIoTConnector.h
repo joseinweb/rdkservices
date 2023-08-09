@@ -21,29 +21,35 @@
 #include <string>
 #include <list>
 #include <list>
+#include "rtConnection.h"
 namespace WPEFramework
 {
     namespace iotbridge
     {
-        enum IOT_DEVICE_TYPE
-        {
-            CAMERA,
-            LIGHT_BULB
-        };
-
         typedef struct _IOTDevice
         {
             std::string deviceName;
             std::string deviceId;
-            IOT_DEVICE_TYPE devType;
+            std::string devType;
         } IOTDevice;
 
-        bool initializeIPC(const std::string &remoteAddr);
-        void cleanupIPC();
+        class RIoTConnector
+        {
 
-        int getDeviceList(std::list<std::shared_ptr<IOTDevice> > &deviceList);
-        int getDeviceProperties(const std::string &uuid, std::list<std::string> &propList);
-        std::string getDeviceProperty(const std::string &uuid, const std::string &propertyName);
-        int sendCommand(const std::string &uuid, const std::string &cmd);
+        private:
+            rtConnection con;
+            rtError rtConnStatus;
+
+        public:
+        RIoTConnector():con(nullptr),rtConnStatus(RT_NO_CONNECTION){}
+
+            bool initializeIPC(const std::string &remoteAddr);
+            void cleanupIPC();
+
+            int getDeviceList(std::list<std::shared_ptr<IOTDevice> > &deviceList);
+            int getDeviceProperties(const std::string &uuid, std::list<std::string> &propList);
+            std::string getDeviceProperty(const std::string &uuid, const std::string &propertyName);
+            int sendCommand(const std::string &uuid, const std::string &cmd);
+        };
     }
 }
