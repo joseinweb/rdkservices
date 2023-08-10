@@ -85,6 +85,7 @@ namespace WPEFramework
             : PluginHost::JSONRPC(), m_apiVersionNumber(API_VERSION_NUMBER_MAJOR), riotConn(nullptr),
               _job(Core::ProxyType<Job>::Create(this)), connectedToRemote(false)
         {
+            Register("refreshIoTBridgeConnection", &RIoTControl::refreshIoTBridgeConnection, this);
             Register("getAvailableDevices", &RIoTControl::getAvailableDevices, this);
             Register("getDeviceProperties", &RIoTControl::getDeviceProperties, this);
             Register("getDeviceProperty", &RIoTControl::getDeviceProperty, this);
@@ -103,6 +104,9 @@ namespace WPEFramework
         }
         void RIoTControl::Deinitialize(PluginHost::IShell * /* service */)
         {
+            std::cout << " [RIoTControl::Deinitialize]" << std::endl;
+            Core::IWorkerPool::Instance().Revoke(Core::proxy_cast<Core::IDispatchType<void> >(_job));
+            std::cout << " [RIoTControl::Deinitialize] Clearing IPC Channel." << std::endl;
             riotConn->cleanupIPC();
             delete riotConn;
             riotConn = nullptr;
@@ -129,7 +133,16 @@ namespace WPEFramework
             std::cout << "[RIoTControl::connectToRemote] completed .Remote address: " << remote_addr.c_str() << std::endl;
             return connectedToRemote;
         }
+        uint32_t RIoTControl::refreshIoTBridgeConnection(const JsonObject &parameters, JsonObject &response)
+        {
 
+            if (!connectedToRemote)
+                connectToRemote();
+
+            response["message"] = connectedToRemote ? "Connected to IoT Gateway" : "Failed to discover IoT Gateway";
+
+            returnResponse(connectedToRemote);
+        }
         // Supported methods
         uint32_t RIoTControl::getAvailableDevices(const JsonObject &parameters, JsonObject &response)
         {

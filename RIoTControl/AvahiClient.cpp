@@ -2,7 +2,7 @@
  * If not stated otherwise in this file or this component's LICENSE
  * file the following copyright and licenses apply:
  *
- * Copyright 2020 RDK Management
+ * Copyright 2023 RDK Management
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@
 #include <thread>
 #include <avahi-client/client.h>
 #include <avahi-client/lookup.h>
+#include <avahi-common/timeval.h>
+
 #include <avahi-common/thread-watch.h>
 #include <avahi-common/malloc.h>
 #include <avahi-common/error.h>
@@ -45,13 +47,14 @@ namespace avahi
 
     void onDeviceStatusChanged(AvahiClient *ac, AvahiClientState acs, void *udata)
     {
-        std::cout << "[AvahiClient][onDeviceStatusChanged] Device status changed" << std::endl;
+        std::cout << "[onDeviceStatusChanged] Device status changed  -- " << std::this_thread::get_id() << std::endl;
         if (AVAHI_CLIENT_FAILURE == acs)
         {
             // Need to stop polling. Some issues with the client connection.
-            std::cout << "[AvahiClient][onDeviceStatusChanged] Client connection failure. exiting discovery" << avahi_strerror(avahi_client_errno(ac)) << std::endl;
+            std::cout << "[onDeviceStatusChanged] Client connection failure. exiting discovery" << avahi_strerror(avahi_client_errno(ac)) << std::endl;
             stopDiscovery();
         }
+        std::cout << "[onDeviceStatusChanged] Exit -- " << std::this_thread::get_id() << std::endl;
     }
     void onServiceResolved(AvahiServiceResolver *r,
                            AvahiIfIndex interface,
@@ -67,7 +70,7 @@ namespace avahi
                            AvahiLookupResultFlags flags,
                            void *userdata)
     {
-        std::cout << "[AvahiClient][onServiceResolved]" << std::endl;
+        std::cout << "[onServiceResolved] -- " << std::this_thread::get_id() << std::endl;
         if (AVAHI_RESOLVER_FOUND == event)
         {
             char a[AVAHI_ADDRESS_STR_MAX];
@@ -80,9 +83,9 @@ namespace avahi
             device->ipAddress = a;
             device->addrType = (address->proto == AVAHI_PROTO_INET ? IPV4 : IPV6);
             deviceList.push_back(device);
-            stopDiscovery();
         }
         avahi_service_resolver_free(r);
+        std::cout << "[onServiceResolved] Exit -- " << std::this_thread::get_id() << std::endl;
     }
 
     void onServiceDiscovery(AvahiServiceBrowser *asb,
@@ -94,52 +97,64 @@ namespace avahi
                             const char *domain,
                             AvahiLookupResultFlags flags, void *udata)
     {
-        std::cout << "[AvahiClient][onServiceDiscovery]" << std::endl;
-
+        std::cout << "onServiceDiscovery -- " << std::this_thread::get_id() << std::endl;
         switch (abevent)
         {
         case AVAHI_BROWSER_FAILURE:
-            std::cout << "[AvahiClient][onServiceDiscovery] AVAHI_BROWSER_FAILURE" << std::endl;
+            std::cout << "onServiceDiscovery AVAHI_BROWSER_FAILURE" << std::endl;
             stopDiscovery();
             break;
         case AVAHI_BROWSER_NEW:
-            std::cout << "[AvahiClient][onServiceDiscovery] AVAHI_BROWSER_NEW" << std::endl;
-            if (!(avahi_service_resolver_new(client, aifIndex, aprotocol, name, type, domain, AVAHI_PROTO_UNSPEC, (AvahiLookupFlags)0, onServiceResolved, nullptr)))
+            std::cout << "onServiceDiscovery AVAHI_BROWSER_NEW" << std::endl;
+            if (!(avahi_service_resolver_new(client, aifIndex, aprotocol, name, type, domain, AVAHI_PROTO_INET, (AvahiLookupFlags)0, onServiceResolved, nullptr)))
                 std::cout << "Failed to register for service resolution of " << name << ", error: " << avahi_strerror(avahi_client_errno(client)) << std::endl;
             break;
         case AVAHI_BROWSER_ALL_FOR_NOW:
-            std::cout << "[AvahiClient][onServiceDiscovery] AVAHI_BROWSER_ALL_FOR_NOW" << std::endl;
-            // stopDiscovery();
+            std::cout << "onServiceDiscovery AVAHI_BROWSER_ALL_FOR_NOW" << std::endl;
             break;
         case AVAHI_BROWSER_REMOVE:
-            std::cout << "[AvahiClient][onServiceDiscovery] AVAHI_BROWSER_REMOVE called " << std::endl;
+            std::cout << "onServiceDiscovery AVAHI_BROWSER_REMOVE called " << std::endl;
             break;
         case AVAHI_BROWSER_CACHE_EXHAUSTED:
-            std::cout << "[AvahiClient][onServiceDiscovery] AVAHI_BROWSER_CACHE_EXHAUSTED called " << std::endl;
+            std::cout << "onServiceDiscovery AVAHI_BROWSER_CACHE_EXHAUSTED called " << std::endl;
             break;
         }
+        std::cout << "[onServiceDiscovery] Exit -- " << std::this_thread::get_id() << std::endl;
     }
 
     bool stopDiscovery()
     {
-        std::thread::id this_id = std::this_thread::get_id();
-        std::cout << "[AvahiClient][stopDiscovery], thread id " << this_id << std::endl;
+        std::cout << "[stopDiscovery] -- " << std::this_thread::get_id() << std::endl;
         std::lock_guard<std::mutex> lockguard(m_stateMutex);
         m_scanInProgress = false;
         m_stateCond.notify_all();
+        std::cout << "[stopDiscovery] Exit -- " << std::this_thread::get_id() << std::endl;
         return true;
     }
     bool initialize(const std::string &serviceName)
     {
 
-        std::cout << "[AvahiClient][initialize]" << std::endl;
+        std::cout << "initialize" << std::endl;
         int error = 0;
         /* Allocate main loop object */
         if (!(thread_poll = avahi_threaded_poll_new()))
         {
-            std::cout << "[AvahiClient][initialize] Failed to create avahi poll object." << std::endl;
+            std::cout << "Failed to create avahi poll object." << std::endl;
             return m_initialized;
         }
+        struct timeval tv;
+        const AvahiPoll *pollObj = avahi_threaded_poll_get(thread_poll);
+
+        avahi_elapse_time(&tv, DD_TIMEOUT_MILLIS, 0);
+
+        pollObj->timeout_new(
+            pollObj, &tv, [](AvahiTimeout *timeout, void *userdata)
+            {
+            std::cout << "[initialize]  timeout reached -- " << std::this_thread::get_id() << std::endl;
+            m_scanInProgress = false;
+            avahi_threaded_poll_quit(thread_poll); 
+            std::cout << "[initialize]  timeout thread exit -- " << std::this_thread::get_id() << std::endl;},
+            nullptr);
 
         /* Allocate a new client */
         client = avahi_client_new(avahi_threaded_poll_get(thread_poll), (AvahiClientFlags)0,
@@ -148,22 +163,23 @@ namespace avahi
         /* Check wether creating the client object succeeded */
         if (!client)
         {
-            std::cout << "[AvahiClient][initialize] Failed to create avahi client instance." << avahi_strerror(error) << std::endl;
+            std::cout << "Failed to create avahi client instance." << avahi_strerror(error) << std::endl;
             return unInitialize();
         }
         /* Create the service browser */
         if (!(sb = avahi_service_browser_new(client, AVAHI_IF_UNSPEC, AVAHI_PROTO_UNSPEC, serviceName.c_str(), NULL, (AvahiLookupFlags)0, onServiceDiscovery, client)))
         {
-            std::cout << "[AvahiClient][initialize] Failed to create service browser: " << avahi_strerror(avahi_client_errno(client)) << std::endl;
+            std::cout << "Failed to create service browser: " << avahi_strerror(avahi_client_errno(client)) << std::endl;
             return unInitialize();
         }
         m_initialized = true;
+        std::cout << "[initialize] Exit -- " << std::this_thread::get_id() << std::endl;
         return m_initialized;
     }
     int discoverDevices(std::list<std::shared_ptr<RDKDevice> > &devices, int timeoutMillis)
     {
 
-        std::cout << "[AvahiClient][discoverDevices] discoverDevices" << std::endl;
+        std::cout << "[discoverDevices] discoverDevices" << std::endl;
         // Let us clear existing deviceList;
         if (m_scanInProgress)
             return DD_SCAN_ALREADY_IN_PROGRESS;
@@ -171,7 +187,8 @@ namespace avahi
         deviceList.clear();
         // Let us put the scan in progress.
         m_scanInProgress = true;
-        std::cout << "[AvahiClient][discoverDevices] Starting scanning" << std::endl;
+        std::cout << "[discoverDevices] Starting scanning" << std::endl;
+
         avahi_threaded_poll_start(thread_poll);
 
         std::unique_lock<std::mutex> lock(m_stateMutex);
@@ -184,8 +201,7 @@ namespace avahi
             // Got a device or error occured?
             if (!m_scanInProgress)
             {
-                std::thread::id this_id = std::this_thread::get_id();
-                std::cout << "[AvahiClient][discoverDevices] Got devices. breaking.." << this_id << std::endl;
+                std::cout << "[discoverDevices] Got devices. breaking.." << std::this_thread::get_id() << std::endl;
                 break;
             }
 
@@ -195,14 +211,15 @@ namespace avahi
 
             m_stateCond.wait_for(lock, remainingTime);
         }
-        std::cout << "[AvahiClient][discoverDevices] Total devices found " << deviceList.size() << std::endl;
+        std::cout << "[discoverDevices] Total devices found " << deviceList.size() << std::endl;
         for (std::list<std::shared_ptr<RDKDevice> >::iterator it = deviceList.begin(); it != deviceList.end(); ++it)
             devices.push_back(*it);
+        std::cout << "[discoverDevices] Exit -- " << std::this_thread::get_id() << std::endl;    
         return deviceList.size();
     }
     bool unInitialize()
     {
-        std::cout << "[AvahiClient][unInitialize]" << std::endl;
+        std::cout << "[unInitialize] " << std::endl;
         if (m_scanInProgress)
         {
             stopDiscovery();
@@ -213,14 +230,13 @@ namespace avahi
         if (client)
             avahi_client_free(client);
         if (thread_poll)
-            avahi_threaded_poll_free(thread_poll);
+            avahi_threaded_poll_stop(thread_poll);
 
-        deviceList.clear();
         m_initialized = false;
         sb = nullptr;
         client = nullptr;
         thread_poll = nullptr;
-        m_scanInProgress = false;
+       std::cout << "[unInitialize] Exit -- " << std::this_thread::get_id() << std::endl;
         return m_initialized;
     }
 }

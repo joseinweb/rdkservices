@@ -76,14 +76,14 @@ namespace WPEFramework
             iotbridge::RIoTConnector *riotConn;
 
             // Available functions
-            bool connectToRemote();
+            uint32_t refreshIoTBridgeConnection(const JsonObject &parameters, JsonObject &response);
             uint32_t getAvailableDevices(const JsonObject &parameters, JsonObject &response);
             uint32_t getDeviceProperties(const JsonObject &parameters, JsonObject &response);
             uint32_t getDeviceProperty(const JsonObject &parameters, JsonObject &response);
             uint32_t sendCommand(const JsonObject &parameters, JsonObject &response);
 
+            bool connectToRemote();
             bool initializeIPC();
-        
 
             const Core::ProxyType<Job> _job;
             bool connectedToRemote;
