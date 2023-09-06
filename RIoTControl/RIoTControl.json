@@ -1,9 +1,209 @@
 {
- "locator":"libWPEFrameworkRIoTControl.so",
- "classname":"RIoTControl",
- "precondition":[
-  "Platform"
- ],
- "callsign":"org.rdk.RIoTControl",
- "autostart":false
+  "$schema": "https://raw.githubusercontent.com/rdkcentral/rdkservices/main/Tools/json_generator/schemas/plugin.schema.json",
+  "info": {
+    "title": "RIoTControl Plugin",
+    "class": "RIoTControl",
+    "description": "The `RIoTControl` plugin allows you to control IoT devices in your local network."
+  },
+  "common": {
+    "$ref": "../common/common.json"
+  },
+  "definitions": {
+    "devicename": {
+      "summary": "The name of the device",
+      "type": "string",
+      "example": "Bedroom Bulb"
+    },
+    "serialNumber": {
+      "summary": "The device attribute value",
+      "type": "string",
+      "example": "1909AXN046181"
+    },
+    "deviceid": {
+      "summary": "Unique identiifer for this device. This parameter is used as deviceId for all fuctions that are targeted for a specific device.",
+      "type": "string",
+      "example": "1234-4567-7890"
+    },
+    "devattr": {
+      "summary": "A device attribute name.",
+      "type": "string",
+      "example": "firmwareVersion"
+    },
+    "devattrval": {
+      "summary": "A device attribute value.",
+      "type": "string",
+      "example": "6.0.1f"
+    },
+    "command": {
+      "summary": "Command to execute on the device",
+      "type": "string",
+      "example": "isOn = true"
+    },
+    "devicetype": {
+      "summary": "Type of the device. Currently two device types are supported.'light' and 'camera'",
+      "type": "string",
+      "example": "light"
+    },
+    "devices": {
+      "summary": "Json array with zero or more IoT devices discovered",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "$ref": "#/definitions/devicename"
+          },
+          "uuid": {
+            "$ref": "#/definitions/deviceid"
+          },
+          "type": {
+            "$ref": "#/definitions/devicetype"
+          }
+        },
+        "required": [
+          "name",
+          "uuid",
+          "type"
+        ]
+      }
+    }
+  },
+  "methods": {
+    "refreshIoTBridgeConnection": {
+      "summary": "Discover RDK-B IoT Gateway and establishes a remote connection.",
+      "result": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "description": "Status description indicating failure of success",
+            "type": "string",
+            "example": "Connected to IoT Gateway"
+          },
+          "success": {
+            "$ref": "#/common/success"
+          }
+        },
+        "required": [
+          "success"
+        ]
+      }
+    },
+    "getAvailableDevices": {
+      "summary": "Provides a list of IoT devices discovered",
+      "result": {
+        "type": "object",
+        "properties": {
+          "devices": {
+            "$ref": "#/definitions/devices"
+          },
+          "success": {
+            "$ref": "#/common/success"
+          }
+        },
+        "required": [
+          "devices",
+          "success"
+        ]
+      }
+    },
+    "getDeviceProperties": {
+      "summary": "Returns the available properties of an IoT device",
+      "params": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "$ref": "#/definitions/deviceid"
+          }
+        },
+        "required": [
+          "deviceId"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "properties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "serialNumber": {
+                  "$ref": "#/definitions/serialNumber"
+                }
+              }
+            }
+          },
+          "success": {
+            "$ref": "#/common/success"
+          }
+        },
+        "required": [
+          "properties",
+          "success"
+        ]
+      }
+    },
+    "getDeviceProperty": {
+      "summary": "Returns the available properties of an IoT device",
+      "params": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "$ref": "#/definitions/deviceid"
+          },
+          "propName": {
+            "$ref": "#/definitions/devattr"
+          }
+        },
+        "required": [
+          "deviceId",
+          "propName"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "$ref": "#/definitions/devattrval"
+          },
+          "success": {
+            "$ref": "#/common/success"
+          }
+        },
+        "required": [
+          "value",
+          "success"
+        ]
+      }
+    },
+    "sendCommand": {
+      "summary": "Send a command to IoT device. This is device specific",
+      "params": {
+        "type": "object",
+        "properties": {
+          "deviceId": {
+            "$ref": "#/definitions/deviceid"
+          },
+          "command": {
+            "$ref": "#/definitions/command"
+          }
+        },
+        "required": [
+          "deviceId",
+          "command"
+        ]
+      },
+      "result": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "$ref": "#/common/success"
+          }
+        },
+        "required": [
+          "success"
+        ]
+      }
+    }
+  }
 }

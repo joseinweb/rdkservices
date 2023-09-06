@@ -152,7 +152,7 @@ namespace avahi
             {
             std::cout << "[initialize]  timeout reached -- " << std::this_thread::get_id() << std::endl;
             m_scanInProgress = false;
-            avahi_threaded_poll_quit(thread_poll); 
+            avahi_threaded_poll_quit(thread_poll);
             std::cout << "[initialize]  timeout thread exit -- " << std::this_thread::get_id() << std::endl;},
             nullptr);
 
@@ -214,7 +214,7 @@ namespace avahi
         std::cout << "[discoverDevices] Total devices found " << deviceList.size() << std::endl;
         for (std::list<std::shared_ptr<RDKDevice> >::iterator it = deviceList.begin(); it != deviceList.end(); ++it)
             devices.push_back(*it);
-        std::cout << "[discoverDevices] Exit -- " << std::this_thread::get_id() << std::endl;    
+        std::cout << "[discoverDevices] Exit -- " << std::this_thread::get_id() << std::endl;
         return deviceList.size();
     }
     bool unInitialize()

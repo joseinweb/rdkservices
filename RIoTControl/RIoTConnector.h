@@ -20,7 +20,7 @@
 #pragma once
 #include <string>
 #include <list>
-#include <list>
+#include <memory>
 #include "rtConnection.h"
 namespace WPEFramework
 {

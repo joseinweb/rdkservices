@@ -20,7 +20,7 @@
 #include "RIoTControl.h"
 #include "UtilsJsonRpc.h"
 #include "AvahiClient.h"
-
+#include "UtilsString.h"
 #include <sstream>
 #define API_VERSION_NUMBER_MAJOR 1
 #define API_VERSION_NUMBER_MINOR 0
@@ -181,6 +181,7 @@ namespace WPEFramework
 
             if (connectedToRemote)
             {
+                using Utils::String::trim;
 
                 std::list<std::string> properties;
                 std::string uuid = parameters["deviceId"].String();
@@ -196,6 +197,8 @@ namespace WPEFramework
                     std::string key, value;
                     std::getline(stream, key, '=');
                     std::getline(stream, value, '=');
+                    trim(key);
+                    trim(value);
                     propObj[key.c_str()] = value;
                 }
 

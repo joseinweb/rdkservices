@@ -85,16 +85,17 @@ namespace WPEFramework
                     result = rtMessage_GetMessageItem(res, "devices", i, &devEntry);
 
                     rtMessage_ToString(devEntry, &entry, &outLen);
-                    std::cout << "[RIoTConnector][getDeviceList]Returning the response " << entry << std::endl;
+                    std::cout << "[RIoTConnector][getDeviceList]Processing device " << entry << std::endl;
                     free(entry);
 
                     rtMessage_GetString(devEntry, "name", (const char **)&entry);
                     device->deviceName = entry;
 
-                    rtMessage_GetString(devEntry, "uuid", (const char **)&entry);
+                    rtMessage_GetString(devEntry, "id", (const char **)&entry);
                     device->deviceId = entry;
 
-                    rtMessage_GetString(devEntry, "devType", (const char **)&entry);
+                    rtMessage_GetString(devEntry, "class", (const char **)&entry);
+                    device->devType = entry;
 
                     deviceList.push_back(device);
                 }
