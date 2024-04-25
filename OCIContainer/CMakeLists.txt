@@ -3,6 +3,7 @@ set(MODULE_NAME ${NAMESPACE}${PLUGIN_NAME})
 
 set(PLUGIN_OCICONTAINER_STARTUPORDER "" CACHE STRING "To configure startup order of OCIContainer plugin")
 
+option(PLUGIN_HIBERNATESUPPORT "Include hibernate support in the build." OFF)
 find_package(PkgConfig)
 find_package(${NAMESPACE}Plugins REQUIRED)
 find_package(Dobby CONFIG)
@@ -15,6 +16,10 @@ pkg_search_module(OMI_CLIENT "omiclientlib")
 if(NOT OMI_CLIENT_FOUND)
     set(OMI_CLIENT_INCLUDE_DIRS stubs)
     message("Using stubs for omiclientlib")
+endif()
+
+if(PLUGIN_HIBERNATESUPPORT)
+        target_compile_definitions(${MODULE_NAME} PRIVATE HIBERNATE_SUPPORT_ENABLED=1)
 endif()
 
 add_library(${MODULE_NAME} SHARED

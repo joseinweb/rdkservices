@@ -529,6 +529,61 @@ uint32_t OCIContainer::resumeContainer(const JsonObject &parameters, JsonObject 
     returnResponse(true);
 }
 
+#ifdef HIBERNATE_SUPPORT_ENABLED
+uint32_t hibernateContainer(const JsonObject &parameters, JsonObject &response)
+{
+    LOGINFO("Hibernate container");
+
+    // Need to have an ID to hibernate
+    returnIfStringParamNotFound(parameters, "containerId");
+    std::string id = parameters["containerId"].String();
+    std::string options;
+
+    int cd = GetContainerDescriptorFromId(id);
+    if (cd < 0)
+    {
+        returnResponse(false);
+    }
+
+    bool offloadSuccessfully = mDobbyProxy->HibernateProcess(cd,options);
+
+    if (!offloadSuccessfully)
+    {
+        LOGERR("Failed to Hibernate container - internal Dobby error.");
+        returnResponse(false);
+    }
+
+    returnResponse(true);
+
+}
+uint32_t wakeupContainer(const JsonObject &parameters, JsonObject &response)
+{
+    LOGINFO("Hibernate container");
+
+    // Need to have an ID to hibernate
+    returnIfStringParamNotFound(parameters, "containerId");
+    std::string id = parameters["containerId"].String();
+
+    int cd = GetContainerDescriptorFromId(id);
+    if (cd < 0)
+    {
+        returnResponse(false);
+    }
+
+    bool wokeSuccessfully = mDobbyProxy->wakeupContainer(cd);
+
+    if (!wokeSuccessfully)
+    {
+        LOGERR("Failed to Wake up container - internal Dobby error.");
+        returnResponse(false);
+    }
+
+    returnResponse(true);
+
+}
+#endif
+
+
 /**
  * @brief Execute a command in a container.
  *
@@ -666,6 +721,16 @@ const void OCIContainer::stateListener(int32_t descriptor, const std::string& na
     {
         __this->onContainerStopped(descriptor, name);
     }
+#ifdef HIBERNATE_SUPPORT_ENABLED    
+    else if (state == IDobbyProxyEvents::ContainerState::Hibernated)
+    {
+         __this->onContainerHibernated(descriptor, name);
+    }
+    else if (state == IDobbyProxyEvents::ContainerState::Awakening)
+    {
+         __this->onContainerAwoken(descriptor, name);
+    }    
+#endif    
     else
     {
         LOGINFO("Received an unknown state event for container '%s'.", name.c_str());
